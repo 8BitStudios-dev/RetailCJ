@@ -76,6 +76,27 @@
   padding: 6px 10px;
 }
 .introBox #introBack[hidden] { display: none; }
+.careerBackup {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.introBox .careerBackupButton { min-height: 40px; padding: 7px; font-size: 12px; }
+.careerBackupHelp, .careerBackupStatus {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.careerBackupStatus { color: #d8e8ff; }
+.careerBackupStatus:empty { display: none; }
+.careerBackupButton:focus-visible { outline: 2px solid #a8c8ff; outline-offset: 2px; }
+.introBox #introArt { height: min(30svh, 220px); }
+.introBox:has(#careerResumeCard:not([hidden])) #introArt { height: min(18svh, 130px); }
 @media (max-width: 420px) {
   #modeChoices { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .introBox #modeChoices .gameModeChoice { min-height: 73px; padding: 9px 11px; gap: 3px; }

@@ -3045,6 +3045,23 @@ function resumeCareer() {
   return beginMode('career', day);
 }
 
+function importCareer(snapshot) {
+  const text = window.PLCareerSave.exportBackup(snapshot);
+  if (!text) return { ok: false, error: 'Il file non è un backup Carriera valido.' };
+  const saved = window.PLCareerSave.parseBackup(text).snapshot;
+  if (careerCheckpoint && typeof window.confirm === 'function' &&
+      !window.confirm('Importare questa Carriera? Il salvataggio attuale sarà sostituito. Esporta prima una copia se vuoi conservarlo.')) {
+    return { ok: false, error: 'Importazione annullata. La Carriera attuale è stata conservata.' };
+  }
+  if (!window.PLCareerSave.save(saved)) {
+    return { ok: false, error: 'Il browser non consente di salvare la Carriera importata. Il salvataggio attuale è stato conservato.' };
+  }
+  careerCheckpoint = saved;
+  showModes();
+  document.getElementById('introBack').hidden = true;
+  return { ok: true };
+}
+
 window.PLGameModes.bind({
   choose: mode => {
     if (mode === 'career' && careerCheckpoint && typeof window.confirm === 'function' &&
@@ -3052,13 +3069,14 @@ window.PLGameModes.bind({
     selectMode(mode);
   },
   resume: resumeCareer,
+  import: importCareer,
 });
 newDay(7);
 if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').classList.remove('show'); }
 updatePanel();
 requestAnimationFrame(frame);
 // per i test: avanza la simulazione senza aspettare
-window.__sim = { step, startDay, newDay, selectMode, resumeCareer, showModes, closeModes,
+window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, showModes, closeModes,
   get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 </script>
 </body>

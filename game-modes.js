@@ -18,6 +18,7 @@
   let currentMode = null;
   let currentSave = null;
   let storageAvailable = true;
+  let importing = false;
 
   function node(tag, className, parent, content) {
     const element = document.createElement(tag);
@@ -56,9 +57,73 @@
       node('span', 'gameModeDescription', button, mode.description);
       return button;
     });
+    const backup = node('div', 'careerBackup', root);
+    backup.setAttribute('aria-label', 'Backup della Carriera');
+    const exportButton = node('button', 'careerBackupButton', backup, 'Esporta Carriera');
+    exportButton.id = 'careerExport';
+    exportButton.type = 'button';
+    const importButton = node('button', 'careerBackupButton', backup, 'Importa Carriera');
+    importButton.id = 'careerImport';
+    importButton.type = 'button';
+    const fileInput = node('input', '', backup);
+    fileInput.id = 'careerImportFile';
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.hidden = true;
+    node('p', 'careerBackupHelp', backup, 'Copia su file l’ultimo salvataggio. Un turno in corso riparte dall’apertura.');
+    const backupStatus = node('p', 'careerBackupStatus', backup);
+    backupStatus.id = 'careerBackupStatus';
+    backupStatus.setAttribute('role', 'status');
+    backupStatus.setAttribute('aria-live', 'polite');
+    exportButton.addEventListener('click', () => {
+      const text = window.PLCareerSave.exportBackup(currentSave);
+      if (!text) return;
+      let url;
+      let link;
+      try {
+        url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        link = node('a', '', root);
+        link.href = url;
+        link.download = `RetailCJ-carriera-giorno-${currentSave.day}.json`;
+        link.hidden = true;
+        link.click();
+        setText(backupStatus, 'Backup preparato. Conserva il file JSON per recuperare la Carriera.');
+      } catch (error) {
+        setText(backupStatus, 'Il browser non ha potuto esportare il file. Riprova.');
+      } finally {
+        if (link) link.remove();
+        if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    });
+    importButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = '';
+      if (!file || importing) return;
+      importing = true;
+      render(currentMode);
+      setText(backupStatus, 'Controllo del backup…');
+      try {
+        if (file.size > window.PLCareerSave.maxBackupBytes) {
+          setText(backupStatus, 'Il file è troppo grande. Scegli un backup Carriera di massimo 64 KB.');
+          return;
+        }
+        const parsed = window.PLCareerSave.parseBackup(await file.text());
+        if (!parsed.ok) { setText(backupStatus, parsed.error); return; }
+        const result = typeof actions.import === 'function' ? actions.import(parsed.snapshot) : { ok: false };
+        setText(backupStatus, result.ok
+          ? 'Carriera importata. Premi “Riprendi Carriera” per giocare.'
+          : result.error || 'La Carriera non è stata importata. Riprova.');
+      } catch (error) {
+        setText(backupStatus, 'Non riesco a leggere questo file. Scegli un backup Carriera JSON.');
+      } finally {
+        importing = false;
+        render(currentMode);
+      }
+    });
     root.addEventListener('click', event => {
       const resumeButton = event.target.closest('button[data-career-action="resume"]');
-      if (resumeButton && root.contains(resumeButton)) {
+      if (resumeButton && root.contains(resumeButton) && !resumeButton.disabled) {
         if (typeof actions.resume === 'function') actions.resume();
         return;
       }
@@ -66,7 +131,8 @@
       if (!button || !root.contains(button) || button.disabled) return;
       if (typeof actions.choose === 'function') actions.choose(button.dataset.gameMode);
     });
-    refs = { root, buttons, resumeCard, summary, resumeDescription, notice };
+    refs = { root, buttons, resumeCard, summary, resumeDescription, notice, resume,
+      exportButton, importButton, backupStatus };
     return refs;
   }
 
@@ -80,6 +146,11 @@
     storageAvailable = available;
     const r = ensure();
     if (r) {
+      r.exportButton.disabled = importing || !saved;
+      r.importButton.disabled = importing;
+      r.resume.disabled = importing;
+      const back = document.getElementById('introBack');
+      if (back) back.disabled = importing;
       r.resumeCard.hidden = !saved;
       if (saved) {
         const day = saved.phase === 'completed' ? saved.day % 31 + 1 : saved.day;
@@ -92,6 +163,7 @@
         ? 'La Carriera si salva all’apertura e a fine turno, in questo browser.'
         : 'Il browser non consente il salvataggio. I progressi restano solo in questa sessione.');
       r.buttons.forEach(button => {
+        button.disabled = importing;
         button.classList.toggle('isSelected', button.dataset.gameMode === currentMode);
         if (button.dataset.gameMode === 'career') {
           setText(button.querySelector('.gameModeTitle'), saved ? 'Nuova Carriera' : 'Carriera · Specialist');

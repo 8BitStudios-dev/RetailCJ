@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
+const {Blob} = require('node:buffer');
 
 const projectDirectory = path.resolve(__dirname, '..');
 const gameDirectory = fs.existsSync(path.join(projectDirectory, 'index.html'))
@@ -18,6 +19,10 @@ function makeEnvironment(options = {}) {
   const counters = { surfaces: 0, fills: 0, images: 0, animationRequests: 0 };
   const documentListeners = new Map();
   const windowListeners = new Map();
+  const objectURLs = new Map();
+  const revokedURLs = [];
+  const downloads = [];
+  let nextObjectURL = 0;
   let document;
 
   function matches(element, selector) {
@@ -143,7 +148,24 @@ function makeEnvironment(options = {}) {
       }
       for (const handler of documentListeners.get(type) || []) handler(event);
     }
-    click() { if (!this.disabled) this.dispatch('click'); }
+    async dispatchAsync(type, payload = {}) {
+      const event = { type, target: this, currentTarget: this, preventDefault() {}, stopPropagation() { this.stopped = true; }, ...payload };
+      for (let node = this; node; node = node.parentElement) {
+        event.currentTarget = node;
+        for (const handler of node.listeners.get(type) || []) await handler(event);
+        if (event.stopped) return;
+      }
+      for (const handler of documentListeners.get(type) || []) await handler(event);
+    }
+    click() {
+      if (this.disabled) return;
+      this.clickCount = (this.clickCount || 0) + 1;
+      if (this.tagName === 'A') {
+        const href = this.href || this.getAttribute('href');
+        downloads.push({href, filename: this.download || this.getAttribute('download'), blob: objectURLs.get(href)});
+      }
+      this.dispatch('click');
+    }
     getBoundingClientRect() { return {left: 12, top: 120, width: 576, height: 760}; }
     getContext() {
       if (this.context) return this.context;
@@ -219,6 +241,15 @@ function makeEnvironment(options = {}) {
   };
   const context = {
     console, document, Math: math,
+    Blob, TextEncoder, TextDecoder,
+    URL: {
+      createObjectURL(blob) {
+        const url = `blob:retailcj-test/${++nextObjectURL}`;
+        objectURLs.set(url, blob);
+        return url;
+      },
+      revokeObjectURL(url) { objectURLs.delete(url); revokedURLs.push(url); },
+    },
     performance: { now: () => 0 },
     requestAnimationFrame() { counters.animationRequests++; },
     matchMedia: () => ({ matches: false }),
@@ -247,7 +278,7 @@ function makeEnvironment(options = {}) {
 
   const evaluate = expression => vm.runInContext(expression, context, {timeout: 10000});
   return {
-    html, context, counters, evaluate, storage,
+    html, context, counters, evaluate, storage, downloads, objectURLs, revokedURLs,
     get: id => elements.get(id) || null,
     mode: () => evaluate('playerMode'),
     game: () => evaluate('game'),
