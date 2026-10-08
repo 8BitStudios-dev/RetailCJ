@@ -7,11 +7,11 @@ const {makeEnvironment} = require('./environment.cjs');
 const CAREER_KEY = 'plgame.career.v1';
 const MODE_KEY = 'plgame.mode';
 const LEVELS_KEY = 'plgame.levels';
-const defaults = {comp: 25, mot: 65, stress: 20};
-const learned = {comp: 44, mot: 63, stress: 21};
+const defaults = {comp: 0, mot: 65, stress: 20, tier: 'S'};
+const learned = {comp: 44, mot: 63, stress: 21, tier: 'S'};
 
 function snapshot(overrides = {}) {
-  return {version: 1, day: 14, phase: 'start', profile: {...learned}, ...overrides};
+  return {version: 2, day: 14, phase: 'start', profile: {...learned}, ...overrides};
 }
 
 function stored(value, extras = []) {
@@ -24,7 +24,7 @@ function load(env) {
 
 function profile(env) {
   const stats = env.mode().player().stats;
-  return {comp: stats.comp, mot: stats.mot, stress: stats.stress};
+  return {comp: stats.comp, mot: stats.mot, stress: stats.stress, tier: stats.tier};
 }
 
 function resume(env) {
@@ -112,7 +112,7 @@ test('closing saves the completed day and actual personal profile for the next s
   resume(second);
   assert.equal(second.game().day, 15);
   const rested = profile(second);
-  closeTo(rested.comp, learned.comp - 0.2);
+  closeTo(rested.comp, learned.comp);
   closeTo(rested.mot, learned.mot + (60 - learned.mot) * 0.15);
   closeTo(rested.stress, learned.stress * 0.7);
   assert.equal(load(second).phase, 'start');
@@ -167,7 +167,7 @@ test('an interrupted shift reloads the start snapshot without keeping uncomplete
   resume(first);
   first.evaluate('startDay()');
   changeLiveProfile(first);
-  assert.deepEqual(profile(first), {comp: 51, mot: 71, stress: 32});
+  assert.deepEqual(profile(first), {comp: 51, mot: 71, stress: 32, tier: 'S'});
   assert.deepEqual(load(first), value, 'Live profile changes do not overwrite the shift-start checkpoint');
 
   const second = makeEnvironment({storage});
@@ -253,16 +253,16 @@ test('career writes, clearing and mode preferences do not alter the legacy level
 test('invalid or corrupt career storage is ignored without preventing a new playable day', () => {
   const corruptValues = [
     '{broken', 'null', '[]', '{}',
-    JSON.stringify(snapshot({version: 2})),
+    JSON.stringify(snapshot({version: 3})),
     JSON.stringify(snapshot({day: 0})),
     JSON.stringify(snapshot({day: 32})),
     JSON.stringify(snapshot({day: 7.5})),
     JSON.stringify(snapshot({phase: 'playing'})),
-    JSON.stringify(snapshot({profile: {comp: 44, mot: 63}})),
-    JSON.stringify(snapshot({profile: {comp: '44', mot: 63, stress: 21}})),
-    JSON.stringify(snapshot({profile: {comp: 76, mot: 63, stress: 21}})),
-    JSON.stringify(snapshot({profile: {comp: 44, mot: -1, stress: 21}})),
-    JSON.stringify(snapshot({profile: {comp: 44, mot: 63, stress: 101}})),
+    JSON.stringify(snapshot({profile: {tier: 'S', comp: 44, mot: 63}})),
+    JSON.stringify(snapshot({profile: {tier: 'S', comp: '44', mot: 63, stress: 21}})),
+    JSON.stringify(snapshot({profile: {tier: 'S', comp: 101, mot: 63, stress: 21}})),
+    JSON.stringify(snapshot({profile: {tier: 'S', comp: 44, mot: -1, stress: 21}})),
+    JSON.stringify(snapshot({profile: {tier: 'S', comp: 44, mot: 63, stress: 101}})),
   ];
   for (const value of corruptValues) {
     const storage = new Map([[CAREER_KEY, value]]);
@@ -280,9 +280,9 @@ test('save rejects non-finite and invalid profiles without replacing a previousl
   const storage = stored(value);
   const env = makeEnvironment({storage});
   for (const expression of [
-    "({...PLCareerSave.load(), profile: {comp: NaN, mot: 63, stress: 21}})",
-    "({...PLCareerSave.load(), profile: {comp: 44, mot: Infinity, stress: 21}})",
-    "({...PLCareerSave.load(), profile: {comp: 44, mot: 63, stress: -1}})",
+    "({...PLCareerSave.load(), profile: {tier: 'S', comp: NaN, mot: 63, stress: 21}})",
+    "({...PLCareerSave.load(), profile: {tier: 'S', comp: 44, mot: Infinity, stress: 21}})",
+    "({...PLCareerSave.load(), profile: {tier: 'S', comp: 44, mot: 63, stress: -1}})",
     "({...PLCareerSave.load(), day: 1.5})",
   ]) {
     assert.equal(env.evaluate(`PLCareerSave.save(${expression})`), false);

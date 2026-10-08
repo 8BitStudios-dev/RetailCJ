@@ -9,6 +9,23 @@
 .playerIdentity { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; font-size: 12px; }
 .playerRole { padding: 2px 5px; border: 1px solid var(--line); border-radius: 3px; color: #a8c8ff; font-size: 10px; }
 .playerStatus { margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.playerCareer { margin-top: 10px; padding: 9px; background: #25354c; border: 1px solid #6389be; border-radius: 5px; min-width: 0; }
+.playerCareerTitle { margin: 0 0 7px; font-size: 11px; color: #d8e8ff; }
+.playerCareerRoles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.playerCareerRole { min-width: 0; padding: 4px 2px; border: 1px solid #46566d; border-radius: 3px; text-align: center; color: #b1b9c7; }
+.playerCareerRole strong { display: block; font-size: 9px; font-weight: 400; overflow-wrap: anywhere; }
+.playerCareerRoleState { display: block; margin-top: 3px; font-size: 8px; line-height: 1.25; overflow-wrap: anywhere; }
+.playerCareerRole.isCurrent { color: #fff; background: #31537f; border-color: #a8c8ff; }
+.playerCareerRole.isCurrent strong { font-weight: 700; }
+.playerCareerRole.isDone { color: #b5e5bb; border-color: #668b70; }
+.playerCareerSummary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 3px 6px; margin-top: 8px; font-size: 11px; }
+.playerCareerValue { color: #fff; white-space: nowrap; }
+.playerCareerBar { height: 9px; margin-top: 5px; border: 1px solid #567196; border-radius: 5px; overflow: hidden; background: #192536; }
+.playerCareerBar span { display: block; height: 100%; width: 0; background: #8db9ff; }
+.playerCareer.isComplete .playerCareerBar span { background: #90d99b; }
+.playerCareerHint { margin: 7px 0 0; color: #c9d7eb; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.playerPromote { width: 100%; min-height: 38px; margin-top: 8px; padding: 6px; font-size: 12px; }
+.playerPromote:disabled { background: #354762; color: #cbd5e2; opacity: 1; border-color: #627188; }
 .playerCurrent { margin-top: 10px; padding: 8px; background: #1f1f27; border: 1px solid var(--line); border-radius: 4px; }
 .playerCurrentTitle { display: block; font-size: 12px; overflow-wrap: anywhere; }
 .playerDescription { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.45; }
@@ -46,6 +63,10 @@
   .playerPanel { position: static; width: 100%; }
   .playerTitle { font-size: 16px; }
   .playerControls button { min-height: 44px; font-size: 12px; }
+  .playerPromote { min-height: 44px; }
+  .playerCareerRole strong { font-size: 10px; }
+  .playerCareerRoleState { font-size: 9px; }
+  .playerCareerHint { font-size: 11px; }
   .playerEnergyBadge { font-size: 10px; }
   .playerDescription, .playerQueue, .playerMessage { font-size: 12px; }
 }

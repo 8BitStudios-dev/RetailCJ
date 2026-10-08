@@ -296,6 +296,7 @@
 <script src="graphics-interior.js"></script>
 <script src="graphics-walls.js"></script>
 <script src="graphics-people.js"></script>
+<script src="career-progression.js"></script>
 <script src="career-save.js"></script>
 <script src="specialist-mode.js"></script>
 <script src="specialist-ui.js"></script>
@@ -504,6 +505,7 @@ let chosenMode = window.PL_SPECIALIST_MODE !== undefined
 let SPECIALIST_ON = chosenMode === 'career';
 let modePicking = false;
 let careerStarted = false;
+let careerPromotionNotice = '';
 let careerCheckpoint = window.PLCareerSave.load();
 
 // La squadra: 43 persone, tutte full time, 5 giorni su 7. Ogni livello ha un tetto di competenza,
@@ -556,7 +558,7 @@ function overnight(focus = { op: 0 }) {
     t.sickTomorrow = false;
     t.stress *= 0.7;
     t.mot += (60 - t.mot) * 0.15;
-    t.comp = Math.min(t.cap, clamp(t.comp - 0.2 + 1.0 * focus.op * (1 - t.comp / 120)));
+    t.comp = Math.min(t.cap, clamp(t.comp - (name === 'Tu' ? 0 : 0.2) + 1.0 * focus.op * (1 - t.comp / 120)));
   }
 }
 
@@ -607,6 +609,7 @@ const rainy = () => game.weather === 'pioggia';
 function pickWeather() { const r = Math.random(); return r < 0.35 ? 'sole' : r < 0.68 ? 'nuvoloso' : 'pioggia'; }
 
 function newDay(dayOfMonth, opts = {}) {
+  careerPromotionNotice = '';
   const date = new Date(2027, 0, dayOfMonth);
   const weekend = date.getDay() === 0 || date.getDay() === 6;
   STOOLS.forEach(s => s.taken = null);
@@ -1442,7 +1445,7 @@ function serve(s, c, weight = 1, errMul = 1) {
   const k = care(s) * weight;
   c.exp += k;
   if (k < 0) c.rushed = true;
-  bump(s, 'comp', 0.08 * (1 - s.stats.comp / 120));
+  if (!s.isPlayer) bump(s, 'comp', 0.08 * (1 - s.stats.comp / 120));
   // un cliente scortese pesa su chi lo serve
   if (c.rude) {
     bump(s, 'stress', 4 * TIER[s.tier].stress); bump(s, 'mot', -1); c.exp -= 3;
@@ -1792,7 +1795,7 @@ function requestExpert(s, c) {
   const demanding = c.complex || c.familiarity === 2 || c.hurry === 2 || c.mood < 35 || (s.tier === 'TS' && c.repair > 0);
   if (!demanding) return;
   const tiers = s.tier === 'TS' ? ['TE', 'G'] : ['E', 'P'];
-  const experts = game.staff.filter(e => e !== s && tiers.includes(e.tier) && !e.hidden && !e.gone && !onBreak(e) &&
+  const experts = game.staff.filter(e => !e.isPlayer && e !== s && tiers.includes(e.tier) && !e.hidden && !e.gone && !onBreak(e) &&
     !e.helpRequester && !e.expertHelp && ['idle', 'wander', 'probe', 'demo', 'checkout', 'helping', 'advise', 'repair', 'waitProduct'].includes(e.state));
   const expert = experts.sort((a, b) => Number(Boolean(a.customer)) - Number(Boolean(b.customer)) || dist(s, a) - dist(s, b))[0];
   if (!expert) return; // Riprova quando una persona esperta può essere raggiunta.
@@ -2536,20 +2539,25 @@ function teamDelta() {
   return [['Team · motivazione', d('mot')], ['Team · stress', d('stress')], ['Team · competenza', d('comp')]];
 }
 
+function updatePlayerDebrief() {
+  const p = playerMode.view().stats;
+  document.getElementById('dbPlayerStats').innerHTML = rows([
+    ['Ruolo', window.PLCareerProgression.role(TEAM.Tu.tier).label],
+    ['Competenza nel ruolo', `${Math.floor(TEAM.Tu.comp)} / 100`],
+    ['Clienti conclusi', p.served], ['Dispositivi consegnati', p.sales],
+    ['Accessori', p.accessories], ['Servizi', p.services], ['Persone aiutate', p.helped],
+    ['Setup completati', p.setups], ['Visite ancora aperte', p.open],
+  ]);
+}
+
 function endDay() {
   game.over = true;
   saveCareerCheckpoint('completed');
   document.getElementById('dbTitle').textContent = SPECIALIST_ON ? 'Il tuo turno è finito' : 'La giornata è finita';
   document.getElementById('dbPlayerStats').hidden = !playerMode;
   document.getElementById('dbStoreResults').open = !playerMode;
-  if (playerMode) {
-    const p = playerMode.view().stats;
-    document.getElementById('dbPlayerStats').innerHTML = rows([
-      ['Clienti conclusi', p.served], ['Dispositivi consegnati', p.sales],
-      ['Accessori', p.accessories], ['Servizi', p.services], ['Persone aiutate', p.helped],
-      ['Setup completati', p.setups], ['Visite ancora aperte', p.open],
-    ]);
-  } else document.getElementById('dbPlayerStats').innerHTML = '';
+  if (playerMode) updatePlayerDebrief();
+  else document.getElementById('dbPlayerStats').innerHTML = '';
   const s = game.stats, L = game.level;
   document.getElementById('dbRetry').hidden = !L;
   document.getElementById('nextDay').hidden = !!L;
@@ -2777,8 +2785,10 @@ const ROLE_LABEL = { point: 'Point', express: 'Cassa Express', accessori: 'Speci
 
 let lastPanel = 0;
 function updatePanel() {
-  window.PLSpecialistUI.render(playerMode ? playerMode.view() : { enabled: false });
-  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available());
+  const personalView = playerMode ? playerMode.view() : { enabled: false };
+  if (careerPromotionNotice && personalView.enabled) personalView.message = careerPromotionNotice;
+  window.PLSpecialistUI.render(personalView);
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
   document.getElementById('clock').textContent = fmt(Math.max(OPEN - 2, game.time));
   const open = game.time >= OPEN && game.time < CLOSE;
   document.getElementById('date').textContent =
@@ -2949,7 +2959,7 @@ function drawAvatar(cv, look) {
   }, 1, { badge: '#ffffff' });
 }
 const intro = { typed: 0, on: true };
-const INTRO_LINE = 'Benvenuto a Piazza Liberty. Osserva il negozio mentre il team segue i clienti, oppure entra sul floor e inizia il tuo percorso da Specialist.';
+const INTRO_LINE = 'Inizia da Specialist con competenza 0. Concludi le visite, raggiungi 100 e scegli la promozione: Expert, Pro, poi Lead.';
 function drawIntro(dt) {
   if (intro.typed < INTRO_LINE.length) {
     intro.typed = Math.min(INTRO_LINE.length, intro.typed + dt * 40);
@@ -2963,7 +2973,7 @@ function showModes() {
   document.getElementById('introText').textContent = INTRO_LINE;
   document.getElementById('introBack').hidden = false;
   document.getElementById('intro').classList.add('show');
-  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available());
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
 }
 function closeModes() {
   modePicking = false;
@@ -2977,24 +2987,37 @@ if (window.autoCoach) { intro.on = false; document.getElementById('intro').class
 
 function createPlayerMode() {
   return window.PLPlayerMode.create({
-    getGame: () => game, OPEN, CLOSE, TEAM, PRODUCT_NAME, STATE_LABEL, goTo, isAvailable, onBreak, serve, log, rand,
+    getGame: () => game, OPEN, CLOSE, TEAM, PRODUCT_NAME, STATE_LABEL, goTo, isAvailable, onBreak, serve, log, rand, bump,
   });
 }
 let playerMode = SPECIALIST_ON ? createPlayerMode() : null;
 window.PLSpecialistUI.bind({
-  next: () => { if (playerMode) playerMode.takeNext(); updatePanel(); },
-  pause: () => { if (playerMode) playerMode.requestBreak(); updatePanel(); },
+  next: () => { careerPromotionNotice = ''; if (playerMode) playerMode.takeNext(); updatePanel(); },
+  pause: () => { careerPromotionNotice = ''; if (playerMode) playerMode.requestBreak(); updatePanel(); },
   focus: () => { if (playerMode) playerMode.focus(); updatePanel(); },
+  promote: promoteCareer,
 });
 function saveCareerCheckpoint(phase) {
   if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;
-  const { mot, stress, comp } = TEAM.Tu;
-  careerCheckpoint = { version: 1, day: game.day, phase, profile: { mot, stress, comp } };
-  window.PLCareerSave.save(careerCheckpoint);
+  const { mot, stress, comp, tier } = TEAM.Tu;
+  careerCheckpoint = { version: 2, day: game.day, phase, profile: { mot, stress, comp, tier } };
+  return window.PLCareerSave.save(careerCheckpoint);
 }
 
 function restoreCareerProfile(snapshot) {
-  TEAM.Tu = { tier: 'S', cap: 75, off: [], vacWeek: -1, ...snapshot.profile };
+  const saved = window.PLCareerSave.normalize(snapshot);
+  TEAM.Tu = { cap: 100, off: [], vacWeek: -1, ...saved.profile };
+}
+
+function promoteCareer() {
+  if (!careerStarted || !SPECIALIST_ON || !playerMode || game.level || modePicking || !playerMode.promote()) return false;
+  const persisted = saveCareerCheckpoint(game.over ? 'completed' : 'start');
+  const role = window.PLCareerProgression.role(TEAM.Tu.tier).label;
+  careerPromotionNotice = `Ora sei ${role}. Competenza nel nuovo ruolo: 0 / 100.` +
+    (persisted ? ' Promozione salvata.' : ' Il browser non ha salvato la promozione: esporta la Carriera per conservarla.');
+  if (game.over) updatePlayerDebrief();
+  updatePanel();
+  return true;
 }
 
 function advanceDay() {
@@ -3010,6 +3033,7 @@ function advanceDay() {
 function beginMode(mode, day) {
   if (!['observation', 'career'].includes(mode)) return false;
   chosenMode = mode;
+  careerPromotionNotice = '';
   SPECIALIST_ON = mode === 'career';
   careerStarted = SPECIALIST_ON;
   window.PLCareerSave.saveMode(mode);
@@ -3076,7 +3100,7 @@ if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').
 updatePanel();
 requestAnimationFrame(frame);
 // per i test: avanza la simulazione senza aspettare
-window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, showModes, closeModes,
+window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, promoteCareer, showModes, closeModes,
   get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 </script>
 </body>

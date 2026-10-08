@@ -7,18 +7,19 @@
   const maxBackupBytes = 64 * 1024;
   let storageAvailable = true;
 
-  function valid(snapshot) {
-    if (!snapshot || snapshot.version !== 1 || !Number.isInteger(snapshot.day) ||
-        snapshot.day < 1 || snapshot.day > 31 || !['start', 'completed'].includes(snapshot.phase)) return false;
+  function normalize(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
+        ![1, 2].includes(snapshot.version) || !Number.isInteger(snapshot.day) ||
+        snapshot.day < 1 || snapshot.day > 31 || !['start', 'completed'].includes(snapshot.phase)) return null;
     const profile = snapshot.profile;
-    return profile && ['mot', 'stress', 'comp'].every(name =>
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
+        !['mot', 'stress', 'comp'].every(name =>
       typeof profile[name] === 'number' && Number.isFinite(profile[name]) &&
-      profile[name] >= 0 && profile[name] <= (name === 'comp' ? 75 : 100));
-  }
-
-  function copy(snapshot) {
-    return { version: 1, day: snapshot.day, phase: snapshot.phase,
-      profile: { mot: snapshot.profile.mot, stress: snapshot.profile.stress, comp: snapshot.profile.comp } };
+      profile[name] >= 0 && profile[name] <= (name === 'comp' && snapshot.version === 1 ? 75 : 100))) return null;
+    const tier = snapshot.version === 1 ? 'S' : profile.tier;
+    if (!['S', 'E', 'P', 'L'].includes(tier)) return null;
+    return { version: 2, day: snapshot.day, phase: snapshot.phase,
+      profile: { mot: profile.mot, stress: profile.stress, comp: profile.comp, tier } };
   }
 
   function read(storageKey) {
@@ -34,9 +35,11 @@
   root.PLCareerSave = {
     key,
     maxBackupBytes,
+    normalize,
     exportBackup(snapshot) {
-      if (!valid(snapshot)) return null;
-      return JSON.stringify({ format: backupFormat, version: 1, career: copy(snapshot) }, null, 2);
+      const career = normalize(snapshot);
+      if (!career) return null;
+      return JSON.stringify({ format: backupFormat, version: 2, career }, null, 2);
     },
     parseBackup(text) {
       if (typeof text !== 'string' || new TextEncoder().encode(text).length > maxBackupBytes) {
@@ -45,20 +48,24 @@
       let backup;
       try { backup = JSON.parse(text); }
       catch (error) { return { ok: false, error: 'Il file non contiene un JSON valido.' }; }
-      if (!backup || backup.format !== backupFormat || backup.version !== 1 || !valid(backup.career)) {
+      const career = backup && normalize(backup.career);
+      if (!backup || backup.format !== backupFormat || ![1, 2].includes(backup.version) ||
+          !backup.career || backup.career.version !== backup.version || !career) {
         return { ok: false, error: 'Il file non è un backup Carriera compatibile con RetailCJ.' };
       }
-      return { ok: true, snapshot: copy(backup.career) };
+      return { ok: true, snapshot: career };
     },
     load() {
       const saved = read(key);
       if (!saved) return null;
       try {
-        const snapshot = JSON.parse(saved);
-        return valid(snapshot) ? copy(snapshot) : null;
+        return normalize(JSON.parse(saved));
       } catch (error) { return null; }
     },
-    save(snapshot) { return Boolean(valid(snapshot)) && write(key, JSON.stringify(copy(snapshot))); },
+    save(snapshot) {
+      const career = normalize(snapshot);
+      return Boolean(career) && write(key, JSON.stringify(career));
+    },
     clear() {
       try { root.localStorage.removeItem(key); return true; }
       catch (error) { storageAvailable = false; return false; }

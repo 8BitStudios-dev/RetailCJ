@@ -115,13 +115,15 @@
         totals = freshTotals();
         message = 'Segui una persona in attesa quando sei disponibile.';
         const team = api.TEAM;
-        if (!team[NAME]) team[NAME] = { tier: 'S', mot: 65, stress: 20, comp: 25, cap: 75, off: [], vacWeek: -1 };
+        if (!team[NAME]) team[NAME] = { tier: 'S', mot: 65, stress: 20, comp: 0, cap: 100, off: [], vacWeek: -1 };
         const stats = team[NAME];
         // The player is always present; the overnight routine can still restore their energy.
-        stats.tier = 'S'; stats.cap = 75; stats.off = []; stats.vacWeek = -1;
+        if (!root.PLCareerProgression.role(stats.tier)) stats.tier = 'S';
+        stats.cap = 100; stats.off = []; stats.vacWeek = -1;
+        stats.comp = Number.isFinite(stats.comp) ? Math.max(0, Math.min(100, stats.comp)) : 0;
         stats.sick = false; stats.sickTomorrow = false;
         entity = {
-          id: PLAYER_ID, name: NAME, tier: 'S', role: 'specialist', rota: 'player',
+          id: PLAYER_ID, name: NAME, tier: stats.tier, role: 'specialist', rota: 'player',
           isStaff: true, isPlayer: true, x: HOME.x, y: HOME.y, home: { ...HOME },
           look: { ...LOOK }, path: [], facing: 'down', walk: 0, bubble: null,
           state: 'idle', t: Infinity, customer: null, served: 0, sessions: 0,
@@ -176,6 +178,31 @@
         if (g && entity) g.selected = entity;
         return entity;
       }
+      function canPromote() {
+        const g = game();
+        if (!g || !entity || !root.PLCareerProgression.view(entity.stats).canPromote) return false;
+        if (closing || g.over) return true;
+        if (!available() || (entity.customer && !entity.customer.gone && !entity.customer.outcome)) return false;
+        return ![...records.values()].some(record => !record.closed && !record.interrupted &&
+          !record.customer.gone && !record.customer.outcome);
+      }
+      function promote() {
+        if (!canPromote() || !root.PLCareerProgression.promote(entity.stats)) return false;
+        entity.tier = entity.stats.tier;
+        entity.stats.cap = 100;
+        const label = root.PLCareerProgression.role(entity.tier).label;
+        message = `Sei ${label}. Il nuovo percorso parte da 0 su 100.`;
+        api.log(`Tu inizi il percorso ${label}`);
+        return true;
+      }
+      function learnFromVisit(record, outcome) {
+        const c = record.customer;
+        let points = 0;
+        if (outcome === 'bought' && record.delivered) points = 4;
+        else if (outcome === 'helped' || (c.kind === 'acc' && outcome === 'bought' && pending(c) === 0)) points = 3;
+        else if (c.kind === 'buy' && outcome === 'browsed') points = 2;
+        if (points) api.bump(entity, 'comp', points);
+      }
       function recordLeave(c, outcome) {
         if (!personal(c)) return;
         const record = track(c);
@@ -196,6 +223,7 @@
         record.outcome = outcome;
         totals.served++;
         if (outcome === 'helped') totals.helped++;
+        learnFromVisit(record, outcome);
         message = `Visita del cliente #${c.id} conclusa.`;
       }
       function beforeClose() {
@@ -258,6 +286,8 @@
         const c = current || (followUp ? followUp.customer : null);
         const record = c && records.get(String(c.id));
         const isOver = Boolean(closing || (g && g.over));
+        const career = root.PLCareerProgression.view(s ? s.stats : { tier: 'S', comp: 0 });
+        career.canPromote = canPromote();
         let status = 'Pronto sul floor';
         if (isOver) status = 'Turno concluso';
         else if (!g || g.briefing || g.time < api.OPEN) status = 'Il tuo turno inizia alle ' + clock(api.OPEN);
@@ -270,17 +300,17 @@
           .map(r => ({ id: r.id, title: `Cliente #${r.id} · ${productLabel(r.customer)}`,
             outcome: historyOutcome(r), time: clock(r.closedAt ?? r.deliveredAt ?? r.startedAt) }));
         return {
-          enabled: true, name: NAME, role: 'Specialist', status, phase: followUp ? 'extend' : phase(s),
+          enabled: true, name: NAME, role: career.role, career, status, phase: followUp ? 'extend' : phase(s),
           active: c ? { id: c.id, productLabel: productLabel(c), description: describe(c),
             stateLabel: followUp ? labels()[c.state] || 'Il cliente continua la visita dopo la consegna' : stateLabel(s),
             startedAt: clock(record ? record.startedAt : g.time), needsSetup: Boolean(c.setup) } : null,
           stats: { ...totals, open: [...records.values()].filter(r => !r.closed).length },
-          energy: { motivation: s ? s.stats.mot : 65, stress: s ? s.stats.stress : 20, competence: s ? s.stats.comp : 25 },
+          energy: { motivation: s ? s.stats.mot : 65, stress: s ? s.stats.stress : 20, competence: s ? s.stats.comp : 0 },
           waiting, canNext: Boolean(running(g) && available() && waiting), canPause: Boolean(canPause(g)),
           isOver, history, message,
         };
       }
-      return { newDay, step, takeNext, reserveNext, requestBreak, focus, view, recordLeave, beforeClose,
+      return { newDay, step, takeNext, reserveNext, requestBreak, focus, promote, view, recordLeave, beforeClose,
         player: () => entity, owns };
     },
   };

@@ -56,6 +56,43 @@
     const status = node('div', 'playerStatus', root);
     status.setAttribute('role', 'status');
 
+    const career = node('section', 'playerCareer', root);
+    career.setAttribute('aria-label', 'Il tuo percorso di Carriera');
+    node('h3', 'playerCareerTitle', career, 'La tua Carriera');
+    const ladder = node('ol', 'playerCareerRoles', career);
+    ladder.setAttribute('aria-label', 'Ruoli della Carriera');
+    const careerRoles = window.PLCareerProgression.roles.map(item => {
+      const row = node('li', 'playerCareerRole', ladder);
+      row.dataset.careerTier = item.tier;
+      node('strong', '', row, item.label);
+      const label = node('span', 'playerCareerRoleState', row);
+      return {row, label};
+    });
+    const careerSummary = node('div', 'playerCareerSummary', career);
+    const careerLabel = node('span', '', careerSummary);
+    careerLabel.id = 'careerProgressLabel';
+    const careerValue = node('strong', 'playerCareerValue', careerSummary);
+    const careerBar = node('div', 'playerCareerBar', career);
+    careerBar.id = 'careerProgress';
+    careerBar.setAttribute('role', 'progressbar');
+    careerBar.setAttribute('aria-labelledby', 'careerProgressLabel');
+    careerBar.setAttribute('aria-valuemin', '0');
+    careerBar.setAttribute('aria-valuemax', '100');
+    const careerFill = node('span', '', careerBar);
+    careerFill.setAttribute('aria-hidden', 'true');
+    const careerHint = node('p', 'playerCareerHint', career);
+    careerHint.id = 'careerPromotionHint';
+    const promote = button(career, 'promote', '', 'playerPromote on');
+    promote.id = 'careerPromote';
+    promote.setAttribute('aria-describedby', 'careerPromotionHint');
+
+    const queue = node('div', 'playerQueue', root);
+    const controls = node('div', 'playerControls', root);
+    const next = button(controls, 'next', 'Segui il prossimo cliente', 'playerNext on');
+    const secondary = node('div', 'playerSecondaryActions', controls);
+    const focus = button(secondary, 'focus', 'Mostrami sul floor');
+    const pause = button(secondary, 'pause', 'Pausa 15 min');
+
     const current = node('div', 'playerCurrent', root);
     const currentTitle = node('strong', 'playerCurrentTitle', current, 'Nessun cliente in corso');
     const description = node('div', 'playerDescription', current);
@@ -86,12 +123,6 @@
       energy[key] = node('b', '', badge, '0');
     });
 
-    const queue = node('div', 'playerQueue', root);
-    const controls = node('div', 'playerControls', root);
-    const next = button(controls, 'next', 'Segui il prossimo cliente', 'playerNext on');
-    const secondary = node('div', 'playerSecondaryActions', controls);
-    const focus = button(secondary, 'focus', 'Mostrami sul floor');
-    const pause = button(secondary, 'pause', 'Pausa 15 min');
     const message = node('div', 'playerMessage', root);
 
     const recent = node('div', 'playerRecent', root);
@@ -105,7 +136,8 @@
       return { row, title, time, outcome };
     });
 
-    refs = { root, name, role, status, currentTitle, description, state, started, progress,
+    refs = { root, name, role, status, career, careerRoles, careerLabel, careerValue, careerBar,
+      careerFill, careerHint, promote, currentTitle, description, state, started, progress,
       stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     root.addEventListener('click', event => {
       const control = event.target.closest('button[data-specialist-action]');
@@ -124,7 +156,44 @@
 
     setText(r.name, view.name || 'Tu');
     setText(r.role, view.role || 'Specialist');
+    r.root.setAttribute('aria-label', 'Il tuo turno da ' + (view.role || 'Specialist'));
     setText(r.status, view.status || (view.isOver ? 'Turno concluso' : 'Pronto sul floor'));
+    const career = view.career;
+    r.career.hidden = !career;
+    if (career) {
+      const value = Math.max(0, Math.min(100, Number(career.progress) || 0));
+      const displayed = Math.floor(value);
+      const nextRole = career.nextRole;
+      const nextLabel = nextRole && (typeof nextRole === 'string' ? nextRole : nextRole.label);
+      r.career.classList.toggle('isComplete', Boolean(career.complete));
+      r.careerRoles.forEach((item, i) => {
+        const current = i === career.index;
+        const completed = i < career.index || (current && career.complete);
+        item.row.classList.toggle('isCurrent', current);
+        item.row.classList.toggle('isDone', completed);
+        setText(item.label, completed ? 'Completato' : current ? 'Tu sei qui' : 'Da fare');
+        if (current) item.row.setAttribute('aria-current', 'step');
+        else item.row.removeAttribute('aria-current');
+      });
+      setText(r.careerLabel, 'Competenza · ' + career.role);
+      setText(r.careerValue, displayed + ' / 100');
+      r.careerBar.setAttribute('aria-valuenow', String(value));
+      r.careerBar.setAttribute('aria-valuetext', value + ' su 100 come ' + career.role);
+      r.careerFill.style.width = value + '%';
+      r.promote.hidden = !nextLabel;
+      r.promote.disabled = value < 100 || !career.canPromote;
+      if (nextLabel) {
+        setText(r.promote, 'Promuoviti a ' + nextLabel);
+        setText(r.careerHint, value >= 100 && !career.canPromote
+          ? 'Promuoviti quando sei libero dalle visite e fuori pausa. Come ' + nextLabel + ' riparti da 0/100.'
+          : value >= 100 ? 'Sei pronto: come ' + nextLabel + ' la competenza riparte da 0/100.'
+          : 'A 100/100 puoi diventare ' + nextLabel + '. La competenza riparte da 0/100.');
+      } else {
+        setText(r.careerHint, career.complete
+          ? 'Percorso completato: hai raggiunto 100/100 come Lead.'
+          : 'Sei Lead. Raggiungi 100/100 per completare il percorso.');
+      }
+    }
     const active = view.active;
     r.root.classList.toggle('hasClient', Boolean(active));
     if (active) {
@@ -157,7 +226,9 @@
     setText(r.extraStats, 'Accessori ' + count(stats.accessories) + ' · servizi ' + count(stats.services)
       + ' · assistenze ' + count(stats.helped) + ' · setup ' + count(stats.setups));
     const energy = view.energy || {};
-    Object.keys(r.energy).forEach(key => setText(r.energy[key], Math.min(100, count(energy[key]))));
+    Object.keys(r.energy).forEach(key => setText(r.energy[key], key === 'competence'
+      ? Math.max(0, Math.min(100, Math.floor(Number(energy[key]) || 0)))
+      : Math.min(100, count(energy[key]))));
     r.energy.stress.parentElement.classList.toggle('isHigh', count(energy.stress) >= 70);
 
     const waiting = count(view.waiting);

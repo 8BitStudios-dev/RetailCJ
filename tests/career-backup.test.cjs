@@ -7,14 +7,14 @@ const {makeEnvironment} = require('./environment.cjs');
 const CAREER_KEY = 'plgame.career.v1';
 const LEVELS_KEY = 'plgame.levels';
 const MAX_BYTES = 64 * 1024;
-const learned = {comp: 44, mot: 63, stress: 21};
+const learned = {comp: 44, mot: 63, stress: 21, tier: 'S'};
 
 function snapshot(overrides = {}) {
-  return {version: 1, day: 14, phase: 'start', profile: {...learned}, ...overrides};
+  return {version: 2, day: 14, phase: 'start', profile: {...learned}, ...overrides};
 }
 
 function envelope(career, overrides = {}) {
-  return {format: 'RetailCJ.career', version: 1, career, ...overrides};
+  return {format: 'RetailCJ.career', version: 2, career, ...overrides};
 }
 
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
@@ -24,8 +24,8 @@ function backup(env, value = snapshot()) { return api(env).exportBackup(value); 
 function importCareer(env, value) { return plain(env.context.__sim.importCareer(value)); }
 
 function profile(env) {
-  const {comp, mot, stress} = env.mode().player().stats;
-  return {comp, mot, stress};
+  const {comp, mot, stress, tier} = env.mode().player().stats;
+  return {comp, mot, stress, tier};
 }
 
 function activeCareer(options = {}) {
@@ -90,15 +90,15 @@ test('incompatible, malformed and invalid profile backups return an error rather
     '{bad JSON', 'null', '[]', '{}',
     JSON.stringify(snapshot()),
     JSON.stringify(envelope(snapshot(), {format: 'SomeOtherGame'})),
-    JSON.stringify(envelope(snapshot(), {version: 2})),
-    JSON.stringify(envelope(snapshot({version: 2}))),
+    JSON.stringify(envelope(snapshot(), {version: 3})),
+    JSON.stringify(envelope(snapshot({version: 3}))),
     JSON.stringify(envelope(snapshot({day: 32}))),
     JSON.stringify(envelope(snapshot({phase: 'live'}))),
-    JSON.stringify(envelope(snapshot({profile: {comp: 76, mot: 63, stress: 21}}))),
-    JSON.stringify(envelope(snapshot({profile: {comp: 44, mot: 101, stress: 21}}))),
-    JSON.stringify(envelope(snapshot({profile: {comp: 44, mot: 63, stress: -1}}))),
-    JSON.stringify(envelope(snapshot({profile: {comp: '44', mot: 63, stress: 21}}))),
-    JSON.stringify(envelope(snapshot({profile: {comp: 44, mot: 63}}))),
+    JSON.stringify(envelope(snapshot({profile: {tier: 'S', comp: 101, mot: 63, stress: 21}}))),
+    JSON.stringify(envelope(snapshot({profile: {tier: 'S', comp: 44, mot: 101, stress: 21}}))),
+    JSON.stringify(envelope(snapshot({profile: {tier: 'S', comp: 44, mot: 63, stress: -1}}))),
+    JSON.stringify(envelope(snapshot({profile: {tier: 'S', comp: '44', mot: 63, stress: 21}}))),
+    JSON.stringify(envelope(snapshot({profile: {tier: 'S', comp: 44, mot: 63}}))),
   ];
   for (const text of invalid) {
     const result = api(env).parseBackup(text);
@@ -126,7 +126,7 @@ test('backup limits are enforced in UTF-8 bytes while a valid exact-limit backup
 
 test('export refuses invalid or non-finite profiles and creates no storage side effects', () => {
   const env = makeEnvironment();
-  for (const value of [null, {}, snapshot({version: 2}), snapshot({day: 0}),
+  for (const value of [null, {}, snapshot({version: 3}), snapshot({day: 0}),
     snapshot({profile: {...learned, comp: NaN}}), snapshot({profile: {...learned, mot: Infinity}})]) {
     assert.equal(backup(env, value), null);
   }
@@ -179,7 +179,7 @@ test('importing either checkpoint phase saves it without starting and round-trip
     const second = makeEnvironment({storage});
     second.get('modeResumeCareer').click();
     const expected = phase === 'completed'
-      ? {comp: learned.comp - 0.2, mot: learned.mot + (60 - learned.mot) * 0.15, stress: learned.stress * 0.7}
+      ? {...learned, mot: learned.mot + (60 - learned.mot) * 0.15, stress: learned.stress * 0.7}
       : learned;
     assert.equal(second.game().day, phase === 'completed' ? 25 : 24);
     assert.deepEqual(profile(second), expected);
@@ -193,7 +193,7 @@ test('importing either checkpoint phase saves it without starting and round-trip
 test('an accepted replacement import updates the checkpoint while preserving the current live visit', () => {
   const fixture = activeCareer();
   const {env} = fixture;
-  const replacement = snapshot({day: 27, profile: {comp: 61, mot: 80, stress: 12}});
+  const replacement = snapshot({day: 27, profile: {tier: 'S', comp: 61, mot: 80, stress: 12}});
   let confirmation = '';
   env.context.confirm = message => { confirmation = message; return true; };
   assert.deepEqual(importCareer(env, replacement), {ok: true});
@@ -212,7 +212,7 @@ test('invalid imports are rejected before confirmation without altering a checkp
   const {env, value} = fixture;
   let confirmations = 0;
   env.context.confirm = () => { confirmations++; return true; };
-  const result = importCareer(env, snapshot({profile: {...learned, comp: 76}}));
+  const result = importCareer(env, snapshot({profile: {...learned, comp: 101}}));
   assert.equal(result.ok, false);
   assert.ok(result.error);
   assert.equal(confirmations, 0);

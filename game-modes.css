@@ -12,6 +12,13 @@
   color: var(--muted);
   text-align: center;
 }
+.careerPath { grid-column: 1 / -1; min-width: 0; padding: 9px 10px; border: 1px solid #566176; border-radius: 5px; background: #252e3c; }
+.careerPathTitle { display: block; font-size: 11px; color: #d8e8ff; }
+.careerPathRoles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin: 6px 0; padding: 0; list-style: none; }
+.careerPathRoles li { min-width: 0; padding: 4px 2px; border: 1px solid #46566d; border-radius: 3px; text-align: center; font-size: 10px; color: #bbc6d6; overflow-wrap: anywhere; }
+.careerPathRoles li.isCurrent { border-color: #a8c8ff; background: #31537f; color: #fff; font-weight: 700; }
+.careerPathRoles li.isDone { border-color: #668b70; color: #b5e5bb; }
+.careerPathHint { margin: 0; font-size: 10px; line-height: 1.4; color: #c0c6d1; }
 .careerResume {
   grid-column: 1 / -1;
   padding: 12px;
@@ -22,7 +29,7 @@
 }
 .careerResume[hidden] { display: none; }
 .careerResumeTitle { display: block; font-size: 14px; }
-.careerResumeSummary { margin: 4px 0; font-size: 13px; color: #d8e8ff; }
+.careerResumeSummary { margin: 4px 0; font-size: 12px; color: #d8e8ff; overflow-wrap: anywhere; }
 .careerResumeDescription { margin: 4px 0 10px; font-size: 11px; color: #c0c6d1; }
 .introBox .careerResumeButton { width: 100%; min-height: 44px; font-size: 14px; }
 .introBox #modeChoices .gameModeChoice {
@@ -32,7 +39,7 @@
   gap: 5px;
   padding: 12px;
   min-width: 0;
-  min-height: 100px;
+  min-height: 90px;
   text-align: left;
   background: #2b303c;
   border: 1px solid #566176;
@@ -63,6 +70,7 @@
   margin-top: 6px;
 }
 .modeBar #modeBadge { margin: 0; font-size: 10px; }
+.modeBar #modeBadge { min-width: 0; overflow-wrap: anywhere; }
 #changeMode {
   flex: 0 0 auto;
   min-height: 32px;
@@ -84,7 +92,7 @@
   padding-top: 8px;
   border-top: 1px solid var(--line);
 }
-.introBox .careerBackupButton { min-height: 40px; padding: 7px; font-size: 12px; }
+.introBox .careerBackupButton { min-width: 0; min-height: 40px; padding: 7px; font-size: 12px; }
 .careerBackupHelp, .careerBackupStatus {
   grid-column: 1 / -1;
   margin: 0;
@@ -95,13 +103,16 @@
 .careerBackupStatus { color: #d8e8ff; }
 .careerBackupStatus:empty { display: none; }
 .careerBackupButton:focus-visible { outline: 2px solid #a8c8ff; outline-offset: 2px; }
-.introBox #introArt { height: min(30svh, 220px); }
-.introBox:has(#careerResumeCard:not([hidden])) #introArt { height: min(18svh, 130px); }
+.introBox #introArt { height: min(25svh, 185px); }
+.introBox:has(#careerResumeCard:not([hidden])) #introArt { height: min(15svh, 110px); }
 @media (max-width: 420px) {
   #modeChoices { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .introBox #modeChoices .gameModeChoice { min-height: 73px; padding: 9px 11px; gap: 3px; }
   .gameModeTitle { font-size: 14px; }
   .gameModeDescription { font-size: 11px; }
+  .careerPath { padding: 8px; }
+  .careerPathRoles { gap: 4px; }
+  .careerPathRoles li { font-size: 9px; }
 }
 @media (max-height: 500px) {
   .introBox #modeChoices .gameModeChoice { min-height: 82px; padding: 9px 11px; }

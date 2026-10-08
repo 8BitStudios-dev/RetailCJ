@@ -10,13 +10,14 @@
     {
       id: 'career',
       title: 'Carriera · Specialist',
-      description: 'Sei uno Specialist. Segui un cliente alla volta e i tuoi risultati.'
+      description: 'Segui i clienti e fai crescere la competenza da 0 a 100 in ogni ruolo.'
     }
   ];
   let refs = null;
   let actions = {};
   let currentMode = null;
   let currentSave = null;
+  let currentLiveProfile = null;
   let storageAvailable = true;
   let importing = false;
 
@@ -48,6 +49,16 @@
     const notice = node('p', 'gameModeNotice', root);
     notice.id = 'careerSaveNotice';
     notice.setAttribute('role', 'status');
+    const careerPath = node('div', 'careerPath', root);
+    node('strong', 'careerPathTitle', careerPath, 'Percorso vendita');
+    const path = node('ol', 'careerPathRoles', careerPath);
+    path.setAttribute('aria-label', 'Da Specialist a Lead');
+    const pathRoles = window.PLCareerProgression.roles.map(item => {
+      const step = node('li', '', path, item.label);
+      step.dataset.careerTier = item.tier;
+      return step;
+    });
+    node('p', 'careerPathHint', careerPath, '0–100 in ogni ruolo. Alla promozione la competenza riparte da 0.');
     const buttons = MODES.map(mode => {
       const button = node('button', 'gameModeChoice', root);
       button.type = 'button';
@@ -101,7 +112,7 @@
       fileInput.value = '';
       if (!file || importing) return;
       importing = true;
-      render(currentMode);
+      render(currentMode, currentSave, storageAvailable, currentLiveProfile);
       setText(backupStatus, 'Controllo del backup…');
       try {
         if (file.size > window.PLCareerSave.maxBackupBytes) {
@@ -118,7 +129,7 @@
         setText(backupStatus, 'Non riesco a leggere questo file. Scegli un backup Carriera JSON.');
       } finally {
         importing = false;
-        render(currentMode);
+        render(currentMode, currentSave, storageAvailable, currentLiveProfile);
       }
     });
     root.addEventListener('click', event => {
@@ -131,7 +142,7 @@
       if (!button || !root.contains(button) || button.disabled) return;
       if (typeof actions.choose === 'function') actions.choose(button.dataset.gameMode);
     });
-    refs = { root, buttons, resumeCard, summary, resumeDescription, notice, resume,
+    refs = { root, buttons, resumeCard, summary, resumeDescription, notice, resume, pathRoles,
       exportButton, importButton, backupStatus };
     return refs;
   }
@@ -140,10 +151,13 @@
     if (element.textContent !== text) element.textContent = text;
   }
 
-  function render(mode, saved = currentSave, available = storageAvailable) {
+  function render(mode, saved = currentSave, available = storageAvailable, liveProfile = null) {
     currentMode = MODES.some(item => item.id === mode) ? mode : null;
     currentSave = saved;
+    currentLiveProfile = liveProfile;
     storageAvailable = available;
+    const careerProfile = liveProfile || (saved && saved.profile);
+    const career = window.PLCareerProgression.view(careerProfile || {tier: 'S', comp: 0});
     const r = ensure();
     if (r) {
       r.exportButton.disabled = importing || !saved;
@@ -154,7 +168,8 @@
       r.resumeCard.hidden = !saved;
       if (saved) {
         const day = saved.phase === 'completed' ? saved.day % 31 + 1 : saved.day;
-        setText(r.summary, `${day} gennaio · Competenza ${Math.round(saved.profile.comp)}`);
+        const checkpointRole = window.PLCareerProgression.view(saved.profile);
+        setText(r.summary, `${day} gennaio · ${checkpointRole.role} · Competenza ${Math.floor(checkpointRole.progress)} / 100`);
         setText(r.resumeDescription, saved.phase === 'completed'
           ? 'Turno concluso. Riparti dall’apertura del giorno successivo.'
           : 'Riparti dall’apertura di questa giornata con la crescita dei turni già conclusi.');
@@ -162,13 +177,19 @@
       setText(r.notice, available
         ? 'La Carriera si salva all’apertura e a fine turno, in questo browser.'
         : 'Il browser non consente il salvataggio. I progressi restano solo in questa sessione.');
+      r.pathRoles.forEach((item, i) => {
+        item.classList.toggle('isCurrent', i === career.index);
+        item.classList.toggle('isDone', i < career.index || (i === career.index && career.complete));
+        if (i === career.index) item.setAttribute('aria-current', 'step');
+        else item.removeAttribute('aria-current');
+      });
       r.buttons.forEach(button => {
         button.disabled = importing;
         button.classList.toggle('isSelected', button.dataset.gameMode === currentMode);
         if (button.dataset.gameMode === 'career') {
           setText(button.querySelector('.gameModeTitle'), saved ? 'Nuova Carriera' : 'Carriera · Specialist');
           setText(button.querySelector('.gameModeDescription'), saved
-            ? 'Inizia dal 7 gennaio con uno Specialist alle prime armi.'
+            ? 'Inizia dal 7 gennaio come Specialist a 0/100.'
             : MODES.find(item => item.id === 'career').description);
         }
       });
@@ -176,7 +197,7 @@
     const badge = document.getElementById('modeBadge');
     if (badge) {
       const selected = MODES.find(item => item.id === currentMode);
-      const label = selected ? selected.title : '';
+      const label = selected ? currentMode === 'career' ? 'Carriera · ' + career.role : selected.title : '';
       if (badge.textContent !== label) badge.textContent = label;
       badge.dataset.gameMode = currentMode || '';
     }
