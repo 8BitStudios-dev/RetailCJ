@@ -55,6 +55,8 @@
     const role = node('span', 'playerRole', identity, 'Specialist');
     const status = node('div', 'playerStatus', root);
     status.setAttribute('role', 'status');
+    const shift = node('div', 'playerShift', root);
+    shift.id = 'playerShift';
 
     const career = node('section', 'playerCareer', root);
     career.hidden = true;
@@ -139,7 +141,7 @@
       return { row, title, time, outcome };
     });
 
-    refs = { root, name, role, status, career, careerRoles, careerLabel, careerValue, careerBar,
+    refs = { root, name, role, status, shift, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     root.addEventListener('click', event => {
@@ -161,6 +163,11 @@
     setText(r.role, view.role || 'Specialist');
     r.root.setAttribute('aria-label', 'Il tuo turno da ' + (view.role || 'Specialist'));
     setText(r.status, view.status || (view.isOver ? 'Turno concluso' : 'Pronto sul floor'));
+    r.root.classList.toggle('needsBreak', Boolean(view.needsBreak));
+    const shift = view.shift;
+    const clock = value => String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
+    setText(r.shift, shift ? `${shift.weeklyHours} h/settimana · ${shift.hours} h al giorno · ${clock(shift.start)}–${clock(shift.end)}` : '');
+    r.shift.hidden = !shift;
     const career = view.career;
     r.career.hidden = true;
     r.promotion.hidden = !career || !career.nextRole || career.progress < 100;
@@ -236,7 +243,7 @@
     r.energy.stress.parentElement.classList.toggle('isHigh', count(energy.stress) >= 70);
 
     const waiting = count(view.waiting);
-    setText(r.queue, view.isOver ? 'Store chiuso' : waiting === 1 ? '1 persona in attesa' : waiting + ' persone in attesa');
+    setText(r.queue, view.isOver ? 'Turno concluso' : waiting === 1 ? '1 persona in attesa' : waiting + ' persone in attesa');
     r.next.disabled = !view.canNext || Boolean(view.isOver);
     r.pause.disabled = !view.canPause || Boolean(view.isOver);
     r.focus.disabled = !view.enabled;

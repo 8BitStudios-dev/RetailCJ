@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
 
-const VERSION = '1.5.1';
+const VERSION = '1.6.0';
 const CAREER_KEY = 'plgame.career.v1';
 const buttons = env => env.context.document.querySelectorAll('[data-app-update]');
 const statuses = env => env.context.document.querySelectorAll('[data-app-update-status]');
@@ -131,7 +131,7 @@ test('refresh preserves origin, path, existing query and hash while replacing an
 
 test('a finished shift can update without confirmation and keeps its completed checkpoint', () => {
   const env = makeEnvironment();
-  env.evaluate("window.__sim.selectMode('career'); startDay(); game.time = CLOSE; closeStore()");
+  env.evaluate("window.__sim.selectMode('career'); startDay(); game.time = playerMode.shiftEnd(); step(0.05)");
   assert.equal(env.game().over, true);
   const checkpoint = env.storage.get(CAREER_KEY);
   assert.equal(JSON.parse(checkpoint).phase, 'completed');

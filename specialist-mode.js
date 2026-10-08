@@ -12,6 +12,7 @@
     create(api) {
       let currentGame = null;
       let entity = null;
+      let shift = null;
       let closing = false;
       let message = '';
       let records = new Map();
@@ -27,10 +28,11 @@
       }
       function running(g) {
         return g && entity && !closing && !g.over && !g.briefing && !g.planning && !g.checkpoint &&
-          !g.moment && g.time >= api.OPEN && g.time < api.CLOSE;
+          !g.moment && g.time >= api.OPEN && g.time < shiftEnd();
       }
+      function shiftEnd() { return shift ? shift.end : api.CLOSE; }
       function available() {
-        return entity && api.isAvailable(entity) && !api.onBreak(entity) && !entity.wantsBreak;
+        return entity && api.isAvailable(entity) && !api.onBreak(entity) && !entity.wantsBreak && !entity.needsBreak;
       }
       function owns(s) { return Boolean(s && s === entity && s.isPlayer); }
       function personal(c) { return Boolean(c && c.ownerId === PLAYER_ID); }
@@ -122,13 +124,18 @@
         stats.cap = 100; stats.off = []; stats.vacWeek = -1;
         stats.comp = Number.isFinite(stats.comp) ? Math.max(0, Math.min(100, stats.comp)) : 0;
         stats.sick = false; stats.sickTomorrow = false;
+        const contract = root.PLCareerProgression.contract(stats);
+        const hours = [4, 6, 8].includes(g.shiftHours) && g.shiftHours <= contract.hours ? g.shiftHours : contract.hours;
+        shift = Object.freeze({ start: api.OPEN, end: api.OPEN + hours * 60, hours, weeklyHours: hours * 5 });
         entity = {
           id: PLAYER_ID, name: NAME, tier: stats.tier, role: 'specialist', rota: 'player',
           isStaff: true, isPlayer: true, x: HOME.x, y: HOME.y, home: { ...HOME },
           look: { ...LOOK }, path: [], facing: 'down', walk: 0, bubble: null,
           state: 'idle', t: Infinity, customer: null, served: 0, sessions: 0,
-          hidden: false, wantsBreak: false, stats, start: { ...stats },
+          hidden: false, wantsBreak: stats.stress >= 70, needsBreak: stats.stress >= 70,
+          shift, stats, start: { ...stats },
         };
+        if (entity.needsBreak) message = 'Stress alto: hai bisogno di una pausa di 15 minuti prima di seguire un cliente.';
         clearReservations(g);
         g.staff = g.staff.filter(s => !s.isPlayer);
         g.staff.push(entity);
@@ -162,7 +169,7 @@
       }
       function canPause(g) {
         return running(g) && !api.onBreak(entity) && !entity.wantsBreak &&
-          (entity.lastBreak === undefined || g.time - entity.lastBreak >= 60);
+          (entity.needsBreak || entity.stats.stress >= 70 || entity.lastBreak === undefined || g.time - entity.lastBreak >= 60);
       }
       function requestBreak() {
         const g = game();
@@ -171,6 +178,37 @@
         clearReservations(g);
         message = entity.customer ? 'Andrai in pausa quando avrai finito con il cliente.' : 'Hai richiesto una pausa di 15 minuti.';
         api.log(entity.customer ? 'Tu andrai in pausa appena libero' : 'Tu richiedi una pausa di 15 minuti');
+        return true;
+      }
+      function requireRest() {
+        const g = game();
+        if (!entity || closing || !g || g.over || (entity.stats.stress < 70 && !entity.needsBreak)) return false;
+        entity.needsBreak = true;
+        clearReservations(g);
+        if (!api.onBreak(entity)) {
+          entity.wantsBreak = true;
+          message = entity.customer ?
+            'Stress alto: finisci con il cliente, poi recupera con una pausa di 15 minuti.' :
+            'Stress alto: hai bisogno di una pausa di 15 minuti prima di seguire un altro cliente.';
+        }
+        return true;
+      }
+      function recordError() {
+        const g = game();
+        if (!entity || closing || !g || g.over) return false;
+        if (entity.stats.tier === 'S') entity.needsBreak = true;
+        return requireRest();
+      }
+      function completeBreak() {
+        const g = game();
+        if (!entity || !g || entity.state !== 'onBreak' || !Number.isFinite(entity.until) || g.time < entity.until) return false;
+        if (entity.stats.stress >= 70) {
+          entity.needsBreak = true;
+          entity.wantsBreak = true;
+          return false;
+        }
+        entity.needsBreak = false;
+        message = 'Pausa conclusa: rientra sul floor e segui il prossimo cliente.';
         return true;
       }
       function focus() {
@@ -243,6 +281,7 @@
         const g = game();
         if (!g || !entity || closing) return;
         records.forEach(record => { if (!record.closed) sync(record); });
+        requireRest();
         // Free time never starts an automatic conversation or changes the player's position.
         if (entity.state === 'idle' && !entity.customer) entity.t = Infinity;
         reserveNext();
@@ -269,7 +308,7 @@
       }
       function historyOutcome(record) {
         const c = record.customer;
-        if (record.interrupted) return record.delivered ? 'Prodotto consegnato; visita rimasta aperta alla chiusura' : 'Visita interrotta alla chiusura';
+        if (record.interrupted) return record.delivered ? 'Prodotto consegnato; visita rimasta aperta a fine turno' : 'Visita interrotta a fine turno';
         if (!record.closed && record.delivered) return 'Prodotto consegnato; configurazione in corso';
         return {
           bought: record.delivered ? 'Acquisto consegnato' : c.kind === 'acc' ? 'Accessorio acquistato' : 'Permuta conclusa',
@@ -292,7 +331,8 @@
         if (isOver) status = 'Turno concluso';
         else if (!g || g.briefing || g.time < api.OPEN) status = 'Il tuo turno inizia alle ' + clock(api.OPEN);
         else if (s && api.onBreak(s)) status = s.state === 'onBreak' ? 'In pausa fino alle ' + clock(s.until) : s.state === 'fromBreak' ? 'Rientri dalla pausa' : 'Vai in pausa';
-        else if (s && s.wantsBreak) status = 'Pausa richiesta: finisci prima con il cliente';
+        else if (s && s.needsBreak) status = current ? 'Stress alto: finisci il cliente, poi pausa di 15 minuti' : 'Stress alto: hai bisogno di una pausa di 15 minuti';
+        else if (s && s.wantsBreak) status = current ? 'Pausa richiesta: finisci prima con il cliente' : 'Pausa di 15 minuti richiesta';
         else if (current) status = stateLabel(s);
         else if (followUp) status = 'Pronto sul floor; un tuo cliente continua la visita';
         const history = [...records.values()].filter(r => r.closed || r.interrupted || r.delivered)
@@ -300,7 +340,8 @@
           .map(r => ({ id: r.id, title: `Cliente #${r.id} · ${productLabel(r.customer)}`,
             outcome: historyOutcome(r), time: clock(r.closedAt ?? r.deliveredAt ?? r.startedAt) }));
         return {
-          enabled: true, name: NAME, role: career.role, career, status, phase: followUp ? 'extend' : phase(s),
+          enabled: true, name: NAME, role: career.role, career, shift: shift ? { ...shift } : null,
+          needsBreak: Boolean(s && s.needsBreak), status, phase: followUp ? 'extend' : phase(s),
           active: c ? { id: c.id, productLabel: productLabel(c), description: describe(c),
             stateLabel: followUp ? labels()[c.state] || 'Il cliente continua la visita dopo la consegna' : stateLabel(s),
             startedAt: clock(record ? record.startedAt : g.time), needsSetup: Boolean(c.setup) } : null,
@@ -310,7 +351,7 @@
           isOver, history, message,
         };
       }
-      return { newDay, step, takeNext, reserveNext, requestBreak, focus, promote, view, recordLeave, beforeClose,
+      return { newDay, step, takeNext, reserveNext, requestBreak, recordError, completeBreak, shiftEnd, focus, promote, view, recordLeave, beforeClose,
         player: () => entity, owns };
     },
   };

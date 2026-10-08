@@ -11,7 +11,8 @@ const roles = [
 ];
 const plain = value => JSON.parse(JSON.stringify(value));
 function checkpoint(tier = 'S', comp = 37.5, phase = 'start') {
-  return {version: 2, day: 17, phase, profile: {mot: 65, stress: 20, comp, tier}};
+  return {version: 2, day: 17, phase, shiftHours: tier === 'S' ? 4 : tier === 'E' ? 6 : 8,
+    profile: {mot: 65, stress: 20, comp, tier}};
 }
 function save(env) { return plain(env.context.PLCareerSave.load()); }
 function ready() {
@@ -193,7 +194,7 @@ test('a real consultation without purchase learns two points and lost or interru
   const unfinished = ready();
   const openClient = client(unfinished);
   unfinished.mode().takeNext();
-  unfinished.evaluate('game.time = CLOSE; closeStore()');
+  unfinished.evaluate('game.time = playerMode.shiftEnd(); step(0.05)');
   assert.equal(competence(unfinished), 0);
   unfinished.mode().recordLeave(openClient, 'bought');
   assert.equal(competence(unfinished), 0);
@@ -244,7 +245,7 @@ test('each sales role survives save, resume, new day, export and import in eithe
     const second = makeEnvironment();
     assert.deepEqual(plain(second.context.__sim.importCareer(parsed.snapshot)), {ok: true});
     assert.equal(second.context.__sim.resumeCareer(), true);
-    assert.equal(second.game().day, phase === 'completed' ? 18 : 17);
+    assert.equal(second.game().day, phase === 'completed' ? 20 : 17);
     assert.equal(second.mode().player().tier, tier);
     assert.equal(second.mode().player().stats.tier, tier);
     assert.equal(second.view().role, label);
@@ -264,11 +265,11 @@ test('a promotion immediately checkpoints the new role at zero before opening an
   for (const phase of ['start', 'completed']) {
     const env = makeEnvironment();
     env.evaluate("window.__sim.selectMode('career')");
-    if (phase === 'completed') env.evaluate('startDay(); game.time = CLOSE; closeStore()');
+    if (phase === 'completed') env.evaluate('startDay(); game.time = playerMode.shiftEnd(); step(0.05)');
     setProgress(env, 100);
     assert.equal(env.context.__sim.promoteCareer(), true);
     assert.equal(env.context.__sim.promoteCareer(), false);
-    assert.deepEqual(save(env), {version: 2, day: 7, phase,
+    assert.deepEqual(save(env), {version: 2, day: 7, phase, shiftHours: 4,
       profile: {tier: 'E', comp: 0, mot: env.mode().player().stats.mot, stress: env.mode().player().stats.stress}});
     const afterReload = makeEnvironment({storage: env.storage});
     afterReload.context.__sim.resumeCareer();
@@ -293,7 +294,7 @@ test('old version-one saves and backups migrate to Specialist without losing pro
   assert.equal(env.game().day, 21);
   assert.equal(competence(env), 74.75);
   assert.equal(env.mode().player().tier, 'S');
-  assert.deepEqual(save(env), migrated);
+  assert.deepEqual(save(env), {...migrated, shiftHours: 4});
 });
 
 test('schema validation rejects invalid tiers, progress beyond 100 and out-of-range legacy saves', () => {
@@ -386,5 +387,12 @@ test('a failed promotion write retains the new role in memory and export preserv
   assert.equal(env.downloads.length, 1);
   const backup = JSON.parse(await env.downloads[0].blob.text());
   assert.deepEqual(backup, {format: 'RetailCJ.career', version: 2,
-    career: checkpoint('E', 0)});
+    career: {...checkpoint('E', 0), shiftHours: 4}});
+  const recovered = makeEnvironment();
+  assert.equal(recovered.context.__sim.importCareer(backup.career).ok, true);
+  recovered.context.__sim.resumeCareer();
+  assert.equal(recovered.mode().player().tier, 'E');
+  assert.equal(competence(recovered), 0);
+  assert.equal(recovered.mode().shiftEnd(), 14 * 60,
+    'Recovering the failed promotion preserves its original four-hour shift');
 });

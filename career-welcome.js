@@ -6,7 +6,7 @@
       title: 'Dal Core al floor',
       text: 'Hai completato il Core, dove ti abbiamo raccontato i valori di Apple. Ora passiamo alla parte operativa: è il momento di conoscere il floor e accompagnare i clienti nelle loro visite.',
       detail: 'Sono Cristina, una Lead. All’inizio ti guideremo noi: prenditi il tempo di osservare, ascoltare e fare esperienza insieme al team.',
-      tip: 'Il tuo primo ruolo è Specialist. Si parte da competenza 0 / 100.'
+      tip: 'Specialist: 20 ore/settimana, 5 turni da 4 ore (10:00–14:00). Si parte da competenza 0 / 100.'
     },
     {
       title: 'Ogni cliente, un’esperienza',
@@ -16,8 +16,8 @@
     },
     {
       title: 'La pratica ti farà crescere',
-      text: 'All’inizio non sarà facile e ogni visita richiederà tempo. È normale. Con l’esperienza diventerai più sicuro e più veloce, senza perdere l’attenzione per chi hai davanti.',
-      detail: 'Concludendo le visite e facendo formazione aumenti la competenza. A 100 puoi scegliere la promozione: Expert, Pro e infine Lead. Nel nuovo ruolo riparti da 0, conservando la rapidità acquisita.',
+      text: 'All’inizio ogni visita richiederà molto tempo. Un errore ti farà salire lo stress: finisci con il cliente, poi recupera con una pausa di 15 minuti. Con la pratica diventerai più sicuro e più veloce.',
+      detail: 'Con le visite concluse e la formazione cresci fino a 100: poi scegli la promozione. Expert lavora 30 ore/settimana, 6 al giorno; Pro e Lead 40 ore, 8 al giorno. Riparti da competenza 0 e conservi la rapidità acquisita.',
       tip: 'Dopo l’apertura, premi “Segui il prossimo cliente”. Segui una persona alla volta, osserva le cinque fasi e porta a termine la visita.'
     }
   ];

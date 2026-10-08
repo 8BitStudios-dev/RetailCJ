@@ -10,7 +10,7 @@ const MAX_BYTES = 64 * 1024;
 const learned = {comp: 44, mot: 63, stress: 21, tier: 'S'};
 
 function snapshot(overrides = {}) {
-  return {version: 2, day: 14, phase: 'start', profile: {...learned}, ...overrides};
+  return {version: 2, day: 14, phase: 'start', shiftHours: 4, profile: {...learned}, ...overrides};
 }
 
 function envelope(career, overrides = {}) {
@@ -179,14 +179,17 @@ test('importing either checkpoint phase saves it without starting and round-trip
     const second = makeEnvironment({storage});
     second.get('modeResumeCareer').click();
     const expected = phase === 'completed'
-      ? {...learned, mot: learned.mot + (60 - learned.mot) * 0.15, stress: learned.stress * 0.7}
+      ? {...learned, mot: 60 + (learned.mot - 60) * 0.85 ** 3, stress: learned.stress * 0.7 ** 3}
       : learned;
-    assert.equal(second.game().day, phase === 'completed' ? 25 : 24);
-    assert.deepEqual(profile(second), expected);
+    assert.equal(second.game().day, phase === 'completed' ? 27 : 24);
+    assert.ok(Math.abs(profile(second).mot - expected.mot) < 1e-9);
+    assert.ok(Math.abs(profile(second).stress - expected.stress) < 1e-9);
+    assert.equal(profile(second).comp, expected.comp);
+    assert.equal(profile(second).tier, expected.tier);
     const third = makeEnvironment({storage});
     third.get('modeResumeCareer').click();
     assert.equal(third.game().day, second.game().day);
-    assert.deepEqual(profile(third), expected, 'Import and reload apply overnight recovery only once');
+    assert.deepEqual(profile(third), profile(second), 'Import and reload apply overnight recovery only once');
   }
 });
 

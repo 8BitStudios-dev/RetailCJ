@@ -9,6 +9,8 @@
 .playerIdentity { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; font-size: 12px; }
 .playerRole { padding: 2px 5px; border: 1px solid var(--line); border-radius: 3px; color: #a8c8ff; font-size: 10px; }
 .playerStatus { margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.playerShift { margin-top: 5px; color: #bdd5ff; font-size: 10px; line-height: 1.45; }
+.playerPanel.needsBreak .playerStatus { color: #ffd6a8; }
 .playerCareer { margin-top: 10px; padding: 9px; background: #25354c; border: 1px solid #6389be; border-radius: 5px; min-width: 0; }
 .playerPromotion { margin-top: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
 .playerCareerTitle { margin: 0 0 7px; font-size: 11px; color: #d8e8ff; }

@@ -76,3 +76,23 @@ test('the learning multiplier does not change NPC consultation durations', () =>
   assert.equal(experienced.tier, 'S');
   assert.equal(inexperienced.ticks, experienced.ticks, 'NPC timers retain their existing rules');
 });
+
+test('the first Specialist interaction is substantially slower and a completed Lead is faster than the unchanged NPC baseline', () => {
+  const beginner = consultation({comp: 0});
+  const npc = consultation({comp: 0, npc: true});
+  const lead = consultation({tier: 'L', comp: 100});
+  assert.ok(beginner.duration >= npc.duration * 1.9,
+    `The beginner needs substantially more real consultation time: ${beginner.duration} vs ${npc.duration}`);
+  assert.ok(lead.duration <= npc.duration * 0.95,
+    `Learning eventually makes the player faster: ${lead.duration} vs ${npc.duration}`);
+});
+
+for (const [tier, next] of [['E', 'P'], ['P', 'L']]) {
+  test(`promoting ${tier} 100 to ${next} 0 also preserves actual consultation speed`, () => {
+    const before = consultation({tier, comp: 100});
+    const after = consultation({tier, comp: 100, promote: true});
+    assert.equal(after.tier, next);
+    assert.equal(after.comp, 0);
+    assert.equal(after.ticks, before.ticks);
+  });
+}

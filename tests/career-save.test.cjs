@@ -11,7 +11,7 @@ const defaults = {comp: 0, mot: 65, stress: 20, tier: 'S'};
 const learned = {comp: 44, mot: 63, stress: 21, tier: 'S'};
 
 function snapshot(overrides = {}) {
-  return {version: 2, day: 14, phase: 'start', profile: {...learned}, ...overrides};
+  return {version: 2, day: 14, phase: 'start', shiftHours: 4, profile: {...learned}, ...overrides};
 }
 
 function stored(value, extras = []) {
@@ -32,7 +32,7 @@ function resume(env) {
 }
 
 function finish(env) {
-  env.evaluate('startDay(); game.time = CLOSE; closeStore()');
+  env.evaluate('startDay(); game.time = playerMode.shiftEnd(); step(0.05)');
 }
 
 function closeTo(actual, expected) {

@@ -175,7 +175,7 @@
       if (back) back.disabled = importing;
       r.resumeCard.hidden = !saved;
       if (saved) {
-        const day = saved.phase === 'completed' ? saved.day % 31 + 1 : saved.day;
+        const day = saved.phase === 'completed' ? window.PLCareerProgression.nextWorkday(saved.day) : saved.day;
         const checkpointRole = window.PLCareerProgression.view(saved.profile);
         setText(r.summary, `${day} gennaio · ${checkpointRole.role}`);
         setText(r.resumeDescription, saved.phase === 'completed'

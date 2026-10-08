@@ -18,8 +18,14 @@
       profile[name] >= 0 && profile[name] <= (name === 'comp' && snapshot.version === 1 ? 75 : 100))) return null;
     const tier = snapshot.version === 1 ? 'S' : profile.tier;
     if (!['S', 'E', 'P', 'L'].includes(tier)) return null;
-    return { version: 2, day: snapshot.day, phase: snapshot.phase,
+    const career = { version: 2, day: snapshot.day, phase: snapshot.phase,
       profile: { mot: profile.mot, stress: profile.stress, comp: profile.comp, tier } };
+    if (snapshot.shiftHours !== undefined) {
+      const maxHours = tier === 'S' ? 4 : tier === 'E' ? 6 : 8;
+      if (![4, 6, 8].includes(snapshot.shiftHours) || snapshot.shiftHours > maxHours) return null;
+      career.shiftHours = snapshot.shiftHours;
+    }
+    return career;
   }
 
   function read(storageKey) {

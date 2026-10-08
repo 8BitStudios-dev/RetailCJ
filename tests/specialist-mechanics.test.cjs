@@ -430,14 +430,14 @@ test('an accessory visit with a backstage order counts only after delivery and n
   assert.equal(env.view().stats.served, 1);
 });
 
-test('store closing marks an undelivered visit incomplete without inventing a personal sale', () => {
+test('the personal shift ending marks an undelivered visit incomplete without inventing a personal sale', () => {
   const env = ready();
   holdOperations(env);
   const c = customer(env);
   env.mode().takeNext();
   until(env, "playerMode.player().state === 'waitProduct'");
   assert.ok(c.pending > 0);
-  env.evaluate('game.time = CLOSE - 0.01; step(0.05)');
+  env.evaluate('game.time = playerMode.shiftEnd() - 0.01; step(0.05)');
   assert.equal(env.game().over, true);
   assert.equal(env.view().isOver, true);
   assert.equal(env.view().stats.sales, 0);
@@ -448,20 +448,20 @@ test('store closing marks an undelivered visit incomplete without inventing a pe
   assert.equal(env.view().stats.sales, 0);
 });
 
-test('a delivered purchase with unfinished setup remains a sale but not a completed visit at closing', () => {
+test('a delivered purchase with unfinished setup remains a sale but not a completed visit at shift end', () => {
   const env = ready();
   const c = customer(env, {setup: 'transfer'});
   env.context.testCustomer = c;
   env.mode().takeNext();
   until(env, "testCustomer.state === 'setup'");
-  env.evaluate('game.time = CLOSE - 0.01; step(0.05)');
+  env.evaluate('game.time = playerMode.shiftEnd() - 0.01; step(0.05)');
   assert.equal(env.view().stats.sales, 1);
   assert.equal(env.view().stats.served, 0);
   assert.equal(env.view().stats.setups, 0);
   assert.equal(env.view().stats.open, 1);
 });
 
-test('a whole normal day reaches 20:00 without old leader, role or checkpoint overlays blocking it', () => {
+test('a whole Specialist shift reaches 14:00 without old leader, role or checkpoint overlays blocking it', () => {
   const env = makeEnvironment({seed: 0x5eed});
   env.evaluate('startDay()');
   const result = env.evaluate(`(() => {
@@ -478,7 +478,7 @@ test('a whole normal day reaches 20:00 without old leader, role or checkpoint ov
   assert.equal(result.planning, false);
   assert.equal(result.checkpoint, false);
   assert.equal(result.over, true, JSON.stringify(result));
-  assert.ok(result.time >= 20 * 60);
+  assert.equal(result.time, 14 * 60);
   assert.ok(env.view().stats.served > 0);
   for (const id of ['moment', 'plan', 'check']) assert.equal(env.get(id).classList.contains('show'), false);
   env.evaluate('render(); updatePanel()');
@@ -641,7 +641,7 @@ test('switching both modes starts a fresh day and never duplicates the player or
     assert.equal(env.mode(), null);
     assert.equal(env.game().staff.some(person => person.isPlayer || person.name === 'Tu'), false);
   }
-  env.evaluate("window.__sim.selectMode('career'); startDay(); game.time = CLOSE - 0.01; step(0.05)");
+  env.evaluate("window.__sim.selectMode('career'); startDay(); game.time = playerMode.shiftEnd() - 0.01; step(0.05)");
   assert.equal(env.get('dbPlayerStats').hidden, false);
   assert.equal(env.get('dbStoreResults').open, false);
   env.get('nextDay').click();

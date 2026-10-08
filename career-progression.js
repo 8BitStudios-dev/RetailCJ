@@ -36,8 +36,27 @@
 
   function learningTime(profile) {
     const career = view(profile);
-    return 1.2 - 0.1 * (career.index + career.progress / career.max);
+    return Math.max(0.8, 2.2 - 0.35 * (career.index + career.progress / career.max));
   }
 
-  root.PLCareerProgression = { roles, role, view, promote, learningTime };
+  function errorStress(profile) {
+    const career = view(profile);
+    return Math.max(12, 55 - 12 * (career.index + career.progress / career.max));
+  }
+
+  function contract(profile) {
+    const career = view(typeof profile === 'string' ? { tier: profile } : profile);
+    const hours = career.index === 0 ? 4 : career.index === 1 ? 6 : 8;
+    return { weeklyHours: hours * 5, hours };
+  }
+
+  function nextWorkday(day) {
+    let next = Number.isInteger(day) && day >= 1 && day <= 31 ? day : 0;
+    do {
+      next = next % 31 + 1;
+    } while ([1, 2].includes(new Date(2027, 0, next).getDay()));
+    return next;
+  }
+
+  root.PLCareerProgression = { roles, role, view, promote, learningTime, errorStress, contract, nextWorkday };
 })(window);

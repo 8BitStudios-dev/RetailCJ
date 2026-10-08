@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.5.1">
+<meta name="application-version" content="1.6.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -75,6 +75,7 @@
   .card { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: 18px 20px; width: min(320px, 92%);
     max-height: 96%; overflow: auto; }
   .card h2 { margin: 0 0 4px; font-size: 18px; }
+  #debrief .card { width: min(480px, 92%); }
   .card .stats { margin: 12px 0 16px; }
   .card button { width: 100%; min-height: 44px; }
   .mWhere { font-size: 12px; color: var(--muted); }
@@ -159,10 +160,10 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.5.1">
-<link rel="stylesheet" href="game-modes.css?v=1.5.1">
-<link rel="stylesheet" href="app-update.css?v=1.5.1">
-<link rel="stylesheet" href="career-welcome.css?v=1.5.1">
+<link rel="stylesheet" href="specialist-ui.css?v=1.6.0">
+<link rel="stylesheet" href="game-modes.css?v=1.6.0">
+<link rel="stylesheet" href="app-update.css?v=1.6.0">
+<link rel="stylesheet" href="career-welcome.css?v=1.6.0">
 </head>
 <body>
 <div class="app">
@@ -268,7 +269,7 @@
         <h2 id="dbTitle">Il tuo turno è finito</h2>
         <div class="sub" id="dbDate"></div>
         <div class="stats" id="dbPlayerStats"></div>
-        <details id="dbStoreResults"><summary>Risultati dello store</summary>
+        <details id="dbStoreResults"><summary id="dbStoreSummary">Risultati dello store</summary>
         <div id="dbGoal"></div>
         <div class="stats" id="dbStats"></div>
         <div class="lessons" id="dbLessons"></div>
@@ -278,7 +279,7 @@
           <button id="dbRetry">Riprova il livello</button>
           <button id="dbLevels">Tutti i livelli</button>
         </div>
-        <button class="on" id="nextDay">Apri il giorno dopo</button>
+        <button class="on" id="nextDay">Prossimo turno</button>
       </div>
     </div>
   </div>
@@ -322,16 +323,16 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.5.1"></script>
-<script src="graphics-walls.js?v=1.5.1"></script>
-<script src="graphics-people.js?v=1.5.1"></script>
-<script src="career-progression.js?v=1.5.1"></script>
-<script src="career-save.js?v=1.5.1"></script>
-<script src="specialist-mode.js?v=1.5.1"></script>
-<script src="specialist-ui.js?v=1.5.1"></script>
-<script src="game-modes.js?v=1.5.1"></script>
-<script src="career-welcome.js?v=1.5.1"></script>
-<script src="app-update.js?v=1.5.1"></script>
+<script src="graphics-interior.js?v=1.6.0"></script>
+<script src="graphics-walls.js?v=1.6.0"></script>
+<script src="graphics-people.js?v=1.6.0"></script>
+<script src="career-progression.js?v=1.6.0"></script>
+<script src="career-save.js?v=1.6.0"></script>
+<script src="specialist-mode.js?v=1.6.0"></script>
+<script src="specialist-ui.js?v=1.6.0"></script>
+<script src="game-modes.js?v=1.6.0"></script>
+<script src="career-welcome.js?v=1.6.0"></script>
+<script src="app-update.js?v=1.6.0"></script>
 <script>
 'use strict';
 
@@ -649,7 +650,8 @@ function newDay(dayOfMonth, opts = {}) {
   BAR.forEach(s => s.taken = null);
   QUEUE.forEach(s => s.taken = null);
   game = {
-    mode: chosenMode, day: dayOfMonth, date, weekend, weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
+    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours,
+    weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
     time: OPEN - 2, speed: game ? game.speed : 1,
     customers: [], staff: [], nextId: 1, lineIn: [], lineGB: [], lineEx: [],
     spawnAcc: 0, selected: null, over: false,
@@ -1030,7 +1032,7 @@ function strategyHtml(phase) {
 }
 function showBrief() {
   const w = WEATHER[game.weather], L = game.level;
-  document.getElementById('brTitle').textContent = SPECIALIST_ON ? 'Carriera · Specialist' : 'Osservazione · Apertura';
+  document.getElementById('brTitle').textContent = SPECIALIST_ON ? 'Carriera · ' + window.PLCareerProgression.view(TEAM.Tu).role : 'Osservazione · Apertura';
   document.getElementById('brDate').textContent = `${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio · ${w.icon} ${w.name}${game.date.getDay() === 6 ? ' · sabato, il giorno più pieno' : game.weekend ? ' · domenica, tanta gente' : ''}`;
   document.getElementById('brGoal').innerHTML = L ? `
     <div class="brSay"><canvas class="ava" width="14" height="20"></canvas><div><b>${L.from}</b> <span class="sub">dalla leadership</span><br>«${L.msg}»</div></div>
@@ -1054,7 +1056,10 @@ function showBrief() {
   drawAvatar(document.querySelector('#brSay .ava'), host.look);
   const strat = strategyHtml('open');
   document.getElementById('brOpts').innerHTML = strat ? `<h3 class="big">Strategia iniziale</h3>${strat}` : '';
-  document.getElementById('brLeft').textContent = SPECIALIST_ON ? 'Sei la persona con il segno azzurro sul floor. Segui il prossimo cliente: consulenza, acquisto e consegna avanzano automaticamente. Il resto dello store continua a lavorare.' : 'Il team segue tutti i clienti in autonomia. Osserva il floor, seleziona le persone e guarda come cambiano i risultati dello store.';
+  const shift = playerMode && playerMode.view().shift;
+  document.getElementById('brLeft').textContent = SPECIALIST_ON
+    ? `Il tuo turno: ${fmt(shift.start)}–${fmt(shift.end)} (${shift.hours} ore, contratto ${shift.weeklyHours} ore/settimana). Lavori da mercoledì a domenica; lunedì e martedì riposi. Segui una persona alla volta. Se lo stress è alto, finisci la visita e recupera con una pausa di 15 minuti.`
+    : 'Il team segue tutti i clienti in autonomia. Osserva il floor, seleziona le persone e guarda come cambiano i risultati dello store.';
   document.getElementById('openStore').textContent = SPECIALIST_ON ? 'Entra sul floor' : 'Osserva il floor';
   document.getElementById('brief').classList.add('show');
 }
@@ -1487,7 +1492,9 @@ function serve(s, c, weight = 1, errMul = 1) {
   if (Math.random() < errorChance(s, c) * weight * errMul) {
     c.exp -= 22; c.error = true;
     say(s, 'oops', 2);
-    bump(s, 'mot', -3); bump(s, 'stress', 3);
+    bump(s, 'mot', -3);
+    bump(s, 'stress', s.isPlayer ? window.PLCareerProgression.errorStress(s.stats) : 3);
+    if (s.isPlayer && playerMode) playerMode.recordError();
     game.stats.errors++;
     if (TIER[s.tier].area === 'bar') game.stats.errBar++;
     if (s.role === 'genius') game.stats.errRepair++;
@@ -1896,7 +1903,10 @@ function updateStaff(s, dt) {
       break;
     case 'onBreak':
       bump(s, 'stress', -1.5 * dt); bump(s, 'mot', 0.2 * dt);
-      if (game.time >= s.until) { s.hidden = false; s.x = DOOR.x; s.y = DOOR.y; s.state = 'fromBreak'; goTo(s, s.home); }
+      if (game.time >= s.until) {
+        if (s.isPlayer && playerMode) { bump(s, 'stress', -35); playerMode.completeBreak(); }
+        s.hidden = false; s.x = DOOR.x; s.y = DOOR.y; s.state = 'fromBreak'; goTo(s, s.home);
+      }
       break;
     case 'fromBreak':
       if (arrived) { s.state = 'idle'; s.t = rand(1, 3); }
@@ -2506,6 +2516,13 @@ function spawnArrivals() {
 
 function step(dt) {
   if (modePicking || game.over || game.briefing || game.moment || game.planning || game.checkpoint) return;
+  const stop = playerMode ? playerMode.shiftEnd() : CLOSE;
+  if (game.time >= stop) {
+    game.time = stop;
+    if (playerMode) finishPlayerShift(); else closeStore();
+    return;
+  }
+  dt = Math.min(Math.max(0, Number(dt) || 0), stop - game.time);
   const before = game.time;
   game.time += dt;
   if (before < OPEN && game.time >= OPEN) log(`Porte aperte: entrano ${spawnArrivals()} clienti che aspettavano fuori`);
@@ -2537,7 +2554,18 @@ function step(dt) {
   game.staff = game.staff.filter(x => !x.gone);
   [...game.customers, ...game.staff].forEach(e => { if (e.bubble && game.time > e.bubble.until) e.bubble = null; });
 
-  if (game.time >= CLOSE) closeStore();
+  if (game.time >= stop) {
+    game.time = stop;
+    if (playerMode) finishPlayerShift(); else closeStore();
+  }
+}
+
+function finishPlayerShift() {
+  if (!playerMode || game.over) return false;
+  playerMode.beforeClose();
+  log(`Il tuo turno termina alle ${fmt(game.time)}. Lo store continua a lavorare.`);
+  endDay();
+  return true;
 }
 
 // Alle 20 la giornata finisce. I percorsi ancora aperti restano incompleti:
@@ -2572,9 +2600,12 @@ function teamDelta() {
 }
 
 function updatePlayerDebrief() {
-  const p = playerMode.view().stats;
+  const view = playerMode.view(), p = view.stats, shift = view.shift;
   document.getElementById('dbPlayerStats').innerHTML = rows([
     ['Ruolo', window.PLCareerProgression.role(TEAM.Tu.tier).label],
+    ['Turno di oggi', `${fmt(shift.start)}–${fmt(shift.end)} · ${shift.hours} ore`],
+    ['Contratto del turno', `${shift.weeklyHours} ore/settimana · 5 giorni`],
+    ['Stress a fine turno', Math.round(TEAM.Tu.stress)],
     ['Competenza nel ruolo', `${Math.floor(TEAM.Tu.comp)} / 100`],
     ['Clienti conclusi', p.served], ['Dispositivi consegnati', p.sales],
     ['Accessori', p.accessories], ['Servizi', p.services], ['Persone aiutate', p.helped],
@@ -2583,11 +2614,14 @@ function updatePlayerDebrief() {
 }
 
 function endDay() {
+  if (game.over) return false;
   game.over = true;
   saveCareerCheckpoint('completed');
   document.getElementById('dbTitle').textContent = SPECIALIST_ON ? 'Il tuo turno è finito' : 'La giornata è finita';
   document.getElementById('dbPlayerStats').hidden = !playerMode;
   document.getElementById('dbStoreResults').open = !playerMode;
+  document.getElementById('dbStoreSummary').textContent = playerMode ? 'Situazione dello store alle ' + fmt(game.time) : 'Risultati dello store';
+  document.getElementById('nextDay').textContent = playerMode ? 'Prossimo turno' : 'Apri il giorno dopo';
   if (playerMode) updatePlayerDebrief();
   else document.getElementById('dbPlayerStats').innerHTML = '';
   const s = game.stats, L = game.level;
@@ -2624,7 +2658,7 @@ function endDay() {
     ['Trade In · finanziamenti', `${s.tradeIns} · ${s.finance}`],
     ['Clienti esigenti: supporto chiesto · dato · mancato', `${s.helpAsked} · ${s.helpGiven} · ${s.helpMissed}`],
     ['Setup avviati · completati', `${s.setupsStarted} · ${s.setups}`],
-    ['Percorsi ancora aperti alla chiusura', s.unfinished],
+    [playerMode ? 'Clienti ancora sul floor a fine turno' : 'Percorsi ancora aperti alla chiusura', playerMode ? game.customers.filter(c => !c.gone && !c.outcome).length : s.unfinished],
     ['…poi tornati per il Trade In', s.tradeAfter],
     ['Accessori all\'Express (B1)', s.express],
     ['Accessori alle pareti', s.wallSales],
@@ -2634,7 +2668,7 @@ function endDay() {
     ['Accessori presi dalla parete', s.fromWall],
     ['Risolti al Genius Bar', s.genius],
     ['Appuntamenti Genius Bar fatti', `${(game.agenda || []).filter(a => a.status === 'fatto').length} su ${(game.agenda || []).length}`],
-    ['…non presentati', (game.agenda || []).filter(a => a.status === 'atteso').length],
+    ['…non presentati', (game.agenda || []).filter(a => a.status === 'atteso' && a.t <= game.time).length],
     ['…iniziati con più di 10 minuti di ritardo', `${s.apptLate}${s.apptStarted ? ` (ritardo medio ${(s.apptDelay / s.apptStarted).toFixed(0)} min)` : ''}`],
     ['Senza appuntamento: fissati oggi · rimandati', `${s.walkinBooked} · ${s.walkinLater}`],
     ['Aiutati ai tavoli C1 e C5', s.helped],
@@ -2645,7 +2679,7 @@ function endDay() {
     ['Clienti scortesi', s.rude],
     ['Pause date', s.breaks],
     ['Andati a casa malati', s.sickNow],
-    ['Formazione a fine giornata', FORMATIONS[game.formation].name],
+    [playerMode ? 'Formazione del turno' : 'Formazione a fine giornata', FORMATIONS[game.formation].name],
     ['Attesa media', s.waitN ? (s.waitSum / s.waitN).toFixed(1) + ' min' : '–'],
     ...teamDelta(),
   ]);
@@ -3035,6 +3069,7 @@ function saveCareerCheckpoint(phase) {
   if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;
   const { mot, stress, comp, tier } = TEAM.Tu;
   careerCheckpoint = { version: 2, day: game.day, phase, profile: { mot, stress, comp, tier } };
+  if (playerMode) careerCheckpoint.shiftHours = playerMode.view().shift.hours;
   return window.PLCareerSave.save(careerCheckpoint);
 }
 
@@ -3057,14 +3092,21 @@ function promoteCareer() {
 function advanceDay() {
   if (!game.over) return false;
   document.getElementById('debrief').classList.remove('show');
-  const day = game.day % 31 + 1;
-  overnight(game.focus);
+  const day = playerMode ? restToNextShift(game.day, game.focus) : game.day % 31 + 1;
+  if (!playerMode) overnight(game.focus);
   newDay(day);
   updatePanel();
   return true;
 }
 
-function beginMode(mode, day) {
+function restToNextShift(day, focus) {
+  const target = window.PLCareerProgression.nextWorkday(day);
+  let date = day;
+  do { overnight(focus); date = date % 31 + 1; } while (date !== target);
+  return target;
+}
+
+function beginMode(mode, day, opts = {}) {
   if (!['observation', 'career'].includes(mode)) return false;
   chosenMode = mode;
   careerPromotionNotice = '';
@@ -3076,7 +3118,7 @@ function beginMode(mode, day) {
   document.getElementById('introBack').hidden = true;
   for (const id of ['levels', 'check', 'moment', 'plan']) document.getElementById(id).classList.remove('show');
   seedRandom(null);
-  newDay(day);
+  newDay(day, opts);
   game.speed = 1;
   acc = 0;
   document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', b.dataset.s === '1'));
@@ -3097,10 +3139,9 @@ function resumeCareer() {
   SPECIALIST_ON = true;
   let day = saved.day;
   if (saved.phase === 'completed') {
-    overnight();
-    day = day % 31 + 1;
+    day = restToNextShift(day);
   }
-  return beginMode('career', day);
+  return beginMode('career', day, saved.phase === 'start' ? { shiftHours: saved.shiftHours } : {});
 }
 
 function importCareer(snapshot) {
