@@ -284,7 +284,7 @@ test('a Sunday completed career rests for three nights, resumes on Wednesday and
   resumed.context.__sim.resumeCareer();
   assert.equal(resumed.game().day, 20);
   assert.ok(Math.abs(resumed.mode().player().stats.stress - 60 * 0.7 ** 3) < 1e-9);
-  assert.ok(Math.abs(resumed.mode().player().stats.mot - (60 + 3 * 0.85 ** 3)) < 1e-9);
+  assert.equal(resumed.mode().player().stats.mot, 63, 'Rest changes stress without inventing social motivation');
   assert.equal(resumed.mode().player().stats.comp, 35);
   const recovered = JSON.parse(JSON.stringify(resumed.mode().player().stats));
   const reload = makeEnvironment({storage: new Map(resumed.storage)});

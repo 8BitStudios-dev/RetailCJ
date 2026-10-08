@@ -113,7 +113,7 @@ test('closing saves the completed day and actual personal profile for the next s
   assert.equal(second.game().day, 15);
   const rested = profile(second);
   closeTo(rested.comp, learned.comp);
-  closeTo(rested.mot, learned.mot + (60 - learned.mot) * 0.15);
+  closeTo(rested.mot, learned.mot);
   closeTo(rested.stress, learned.stress * 0.7);
   assert.equal(load(second).phase, 'start');
   assert.equal(load(second).day, 15);
@@ -167,7 +167,8 @@ test('an interrupted shift reloads the start snapshot without keeping uncomplete
   resume(first);
   first.evaluate('startDay()');
   changeLiveProfile(first);
-  assert.deepEqual(profile(first), {comp: 51, mot: 71, stress: 32, tier: 'S'});
+  assert.deepEqual(profile(first), {comp: learned.comp + 7 * (1 - 0.0075 * learned.stress),
+    mot: 71, stress: 32, tier: 'S'});
   assert.deepEqual(load(first), value, 'Live profile changes do not overwrite the shift-start checkpoint');
 
   const second = makeEnvironment({storage});

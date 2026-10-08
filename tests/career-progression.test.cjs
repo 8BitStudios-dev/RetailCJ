@@ -18,6 +18,15 @@ function save(env) { return plain(env.context.PLCareerSave.load()); }
 function ready() {
   const env = makeEnvironment();
   env.evaluate(`
+    window.learningAwards = [];
+    const actualBump = bump;
+    bump = function(s, key, delta) {
+      const stress = s.stats.stress, before = s.stats.comp;
+      actualBump(s, key, delta);
+      if (s.isPlayer && key === 'comp' && delta > 0) {
+        window.learningAwards.push({base: delta, stress, before, after: s.stats.comp});
+      }
+    };
     window.__sim.selectMode('career'); startDay();
     game.arrivals = []; game.sessions = []; game.customers = [];
     game.lineIn = []; game.lineGB = []; game.lineEx = [];
@@ -53,6 +62,16 @@ function until(env, condition, limit = 240) {
 }
 function competence(env) { return env.mode().player().stats.comp; }
 function setProgress(env, comp) { env.mode().player().stats.comp = comp; env.evaluate('updatePanel()'); }
+function learningReward(env, base) {
+  const awards = plain(env.context.learningAwards);
+  assert.equal(awards.length, 1, 'The real completed visit grants learning exactly once');
+  assert.equal(awards[0].base, base);
+  const {stress, before, after} = awards[0];
+  const expected = Math.min(100, before + base * (1 - 0.0075 * Math.max(0, Math.min(100, stress))));
+  assert.ok(Math.abs(after - expected) < 1e-9, `${after} differs from stress-adjusted ${expected}`);
+  assert.ok(Math.abs(competence(env) - expected) < 1e-9);
+  return expected;
+}
 
 test('a new career starts as Specialist with zero competence on the full 100-point scale', () => {
   const env = makeEnvironment();
@@ -142,7 +161,7 @@ test('a promotion is blocked during an active visit and a delivered follow-up', 
   assert.equal(env.view().role, 'Expert');
 });
 
-test('a product handover learns four points only after the real visit concludes, once', () => {
+test('a product handover learns its stress-adjusted four-point reward only after the real visit concludes, once', () => {
   const env = ready();
   const c = client(env, {setup: 'transfer'});
   env.context.testClient = c;
@@ -151,13 +170,14 @@ test('a product handover learns four points only after the real visit concludes,
   assert.equal(env.view().stats.sales, 1);
   assert.equal(competence(env), 0, 'An open setup has not completed its personal visit');
   until(env, "testClient.outcome === 'bought'");
-  assert.equal(competence(env), 4);
+  const earned = learningReward(env, 4);
   env.mode().recordLeave(c, 'bought');
   env.mode().recordLeave(c, 'bought');
-  assert.equal(competence(env), 4);
+  assert.equal(competence(env), earned);
+  assert.equal(env.context.learningAwards.length, 1);
 });
 
-test('real completed help and accessory visits learn three points each', () => {
+test('real completed help and accessory visits learn stress-adjusted three-point rewards', () => {
   for (const kind of ['help', 'acc']) {
     const env = ready();
     const c = client(env, {kind});
@@ -165,22 +185,24 @@ test('real completed help and accessory visits learn three points each', () => {
     env.mode().takeNext();
     until(env, "Boolean(testClient.outcome)");
     assert.equal(c.outcome, kind === 'help' ? 'helped' : 'bought');
-    assert.equal(competence(env), 3);
+    const earned = learningReward(env, 3);
     env.mode().recordLeave(c, c.outcome);
-    assert.equal(competence(env), 3);
+    assert.equal(competence(env), earned);
+    assert.equal(env.context.learningAwards.length, 1);
   }
 });
 
-test('a real consultation without purchase learns two points and lost or interrupted visits learn zero', () => {
+test('a real consultation without purchase learns a stress-adjusted two-point reward and lost or interrupted visits learn zero', () => {
   const env = ready();
   const c = client(env, {fast: false});
   env.context.testClient = c;
   env.mode().takeNext();
   env.evaluate('Math.random = () => 0.999');
   until(env, "testClient.outcome === 'browsed'");
-  assert.equal(competence(env), 2);
+  const earned = learningReward(env, 2);
   env.mode().recordLeave(c, 'browsed');
-  assert.equal(competence(env), 2);
+  assert.equal(competence(env), earned);
+  assert.equal(env.context.learningAwards.length, 1);
 
   const lost = ready();
   const lostClient = client(lost);
@@ -190,6 +212,7 @@ test('a real consultation without purchase learns two points and lost or interru
   assert.equal(competence(lost), 0);
   lost.mode().recordLeave(lostClient, 'bought');
   assert.equal(competence(lost), 0);
+  assert.equal(lost.context.learningAwards.length, 0);
 
   const unfinished = ready();
   const openClient = client(unfinished);
@@ -198,6 +221,7 @@ test('a real consultation without purchase learns two points and lost or interru
   assert.equal(competence(unfinished), 0);
   unfinished.mode().recordLeave(openClient, 'bought');
   assert.equal(competence(unfinished), 0);
+  assert.equal(unfinished.context.learningAwards.length, 0);
 });
 
 test('the final learning increment caps at 100 and training can reach the same promotion threshold', () => {

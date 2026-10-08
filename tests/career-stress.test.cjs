@@ -14,6 +14,7 @@ function fixture(tier = 'S', comp = 0) {
     window.__sim.resumeCareer(); startDay();
     game.arrivals = []; game.sessions = []; game.customers = [];
     game.lineIn = []; game.lineGB = []; game.lineEx = [];
+    game.staff = game.staff.filter(s => s.role !== 'lead');
     game.time = OPEN; game.weather = 'sole'; Math.random = () => 0.5;
   `);
   return env;
@@ -53,7 +54,7 @@ test('a real service error gives a new Specialist 55 stress and weighs less on a
   assert.equal(forceError(beginner, beginner.mode().player(), client), true);
   assert.equal(client.error, true);
   assert.equal(beginner.mode().player().stats.stress, 75);
-  assert.equal(beginner.mode().player().stats.mot, 62);
+  assert.equal(beginner.mode().player().stats.mot, 65, 'An error changes stress, not social motivation');
   assert.equal(beginner.mode().player().needsBreak, true);
   assert.equal(beginner.game().stats.errors, 1);
 

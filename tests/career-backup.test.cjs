@@ -55,7 +55,7 @@ function assertVisitPreserved(fixture) {
   assert.equal(env.mode().player(), player);
   assert.equal(player.customer, client);
   assert.equal(client.staff, player);
-  assert.equal(profile(env).comp, 51);
+  assert.equal(profile(env).comp, learned.comp + 7 * (1 - 0.0075 * learned.stress));
 }
 
 async function chooseFile(env, text, overrides = {}) {
@@ -179,7 +179,7 @@ test('importing either checkpoint phase saves it without starting and round-trip
     const second = makeEnvironment({storage});
     second.get('modeResumeCareer').click();
     const expected = phase === 'completed'
-      ? {...learned, mot: 60 + (learned.mot - 60) * 0.85 ** 3, stress: learned.stress * 0.7 ** 3}
+      ? {...learned, stress: learned.stress * 0.7 ** 3}
       : learned;
     assert.equal(second.game().day, phase === 'completed' ? 27 : 24);
     assert.ok(Math.abs(profile(second).mot - expected.mot) < 1e-9);

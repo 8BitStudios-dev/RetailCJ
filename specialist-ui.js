@@ -127,6 +127,13 @@
       node('span', '', badge, label);
       energy[key] = node('b', '', badge, '0');
     });
+    const learning = node('div', 'playerLearning', root);
+    learning.id = 'playerLearning';
+    const factors = node('details', 'playerFactors', root);
+    node('summary', '', factors, 'I tre fattori');
+    node('p', '', factors, 'Motivazione: clima della squadra, supporto dei colleghi e riconoscimento dei Lead.');
+    node('p', '', factors, 'Stress: impegno sul floor ed errori. Pause e riposo aiutano a recuperare.');
+    node('p', '', factors, 'Competenza: cresce lavorando e con la formazione. Lo stress riduce i nuovi punti appresi; la competenza acquisita resta.');
 
     const message = node('div', 'playerMessage', root);
 
@@ -141,7 +148,7 @@
       return { row, title, time, outcome };
     });
 
-    refs = { root, name, role, status, shift, career, careerRoles, careerLabel, careerValue, careerBar,
+    refs = { root, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     root.addEventListener('click', event => {
@@ -238,9 +245,11 @@
       + ' · assistenze ' + count(stats.helped) + ' · setup ' + count(stats.setups));
     const energy = view.energy || {};
     Object.keys(r.energy).forEach(key => setText(r.energy[key], key === 'competence'
-      ? Math.max(0, Math.min(100, Math.floor(Number(energy[key]) || 0)))
+      ? (Math.floor(Math.max(0, Math.min(100, Number(energy[key]) || 0)) * 10) / 10).toLocaleString('it-IT')
       : Math.min(100, count(energy[key]))));
     r.energy.stress.parentElement.classList.toggle('isHigh', count(energy.stress) >= 70);
+    const rate = window.PLCareerProgression.learningRate({ stress: energy.stress });
+    setText(r.learning, 'Apprendimento attuale: ' + Math.round(rate * 100) + '% · meno stress, più crescita');
 
     const waiting = count(view.waiting);
     setText(r.queue, view.isOver ? 'Turno concluso' : waiting === 1 ? '1 persona in attesa' : waiting + ' persone in attesa');

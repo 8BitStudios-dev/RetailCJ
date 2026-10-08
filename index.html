@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.6.0">
+<meta name="application-version" content="1.7.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -160,10 +160,10 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.6.0">
-<link rel="stylesheet" href="game-modes.css?v=1.6.0">
-<link rel="stylesheet" href="app-update.css?v=1.6.0">
-<link rel="stylesheet" href="career-welcome.css?v=1.6.0">
+<link rel="stylesheet" href="specialist-ui.css?v=1.7.0">
+<link rel="stylesheet" href="game-modes.css?v=1.7.0">
+<link rel="stylesheet" href="app-update.css?v=1.7.0">
+<link rel="stylesheet" href="career-welcome.css?v=1.7.0">
 </head>
 <body>
 <div class="app">
@@ -323,16 +323,16 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.6.0"></script>
-<script src="graphics-walls.js?v=1.6.0"></script>
-<script src="graphics-people.js?v=1.6.0"></script>
-<script src="career-progression.js?v=1.6.0"></script>
-<script src="career-save.js?v=1.6.0"></script>
-<script src="specialist-mode.js?v=1.6.0"></script>
-<script src="specialist-ui.js?v=1.6.0"></script>
-<script src="game-modes.js?v=1.6.0"></script>
-<script src="career-welcome.js?v=1.6.0"></script>
-<script src="app-update.js?v=1.6.0"></script>
+<script src="graphics-interior.js?v=1.7.0"></script>
+<script src="graphics-walls.js?v=1.7.0"></script>
+<script src="graphics-people.js?v=1.7.0"></script>
+<script src="career-progression.js?v=1.7.0"></script>
+<script src="career-save.js?v=1.7.0"></script>
+<script src="specialist-mode.js?v=1.7.0"></script>
+<script src="specialist-ui.js?v=1.7.0"></script>
+<script src="game-modes.js?v=1.7.0"></script>
+<script src="career-welcome.js?v=1.7.0"></script>
+<script src="app-update.js?v=1.7.0"></script>
 <script>
 'use strict';
 
@@ -580,7 +580,7 @@ for (const [tier, names] of Object.entries(ROSTER)) for (const name of names) {
 const onVacation = (name, day) => TEAM[name].vacWeek === Math.floor((day - 1) / 7) % 4;
 {
 }
-// La notte si riposa: lo stress scende, la motivazione torna verso la media
+// La notte lo stress scende. Il giocatore conserva motivazione sociale e competenza acquisita.
 // Stress alto a fine giornata: il giorno dopo si rischia la malattia
 function overnight(focus = { op: 0 }) {
   for (const [name, t] of Object.entries(TEAM)) {
@@ -589,13 +589,27 @@ function overnight(focus = { op: 0 }) {
     if (t.sickTomorrow || (t.stress > 70 && Math.random() < (t.stress - 70) / 60)) t.sick = true;
     t.sickTomorrow = false;
     t.stress *= 0.7;
-    t.mot += (60 - t.mot) * 0.15;
-    t.comp = Math.min(t.cap, clamp(t.comp - (name === 'Tu' ? 0 : 0.2) + 1.0 * focus.op * (1 - t.comp / 120)));
+    if (name !== 'Tu') {
+      t.mot += (60 - t.mot) * 0.15;
+      t.comp = Math.min(t.cap, clamp(t.comp - 0.2 + 1.0 * focus.op * (1 - t.comp / 120)));
+    }
   }
 }
 
 const clamp = v => Math.max(0, Math.min(100, v));
-function bump(s, key, d) { s.stats[key] = key === 'comp' ? Math.min(s.stats.cap, clamp(s.stats.comp + d)) : clamp(s.stats[key] + d); }
+function bump(s, key, d) {
+  if (s.isPlayer && key === 'comp' && d > 0) d *= window.PLCareerProgression.learningRate(s.stats);
+  s.stats[key] = key === 'comp' ? Math.min(s.stats.cap, clamp(s.stats.comp + d)) : clamp(s.stats[key] + d);
+}
+function careerTeamClimate() {
+  let total = 0, weight = 0;
+  for (const colleague of game.staff) {
+    if (colleague.isPlayer || colleague.gone || colleague.state === 'leavingSick' || !Number.isFinite(colleague.stats.mot)) continue;
+    const influence = colleague.role === 'lead' ? 2 : 1;
+    total += colleague.stats.mot * influence; weight += influence;
+  }
+  return weight ? total / weight : null;
+}
 // I gettoni del Brief: game.focus = { op, sales, cel }, da 0 a 3 ciascuno
 const F = () => game.focus;
 // La tattica del floor si sceglie all'apertura e si può cambiare alle 13 e alle 16
@@ -1472,6 +1486,22 @@ function checkIn(point, c) {
   spot.taken = c; c.slot = spot; c.state = 'toQueue'; goTo(c, spot);
 }
 
+// In Carriera, motivazione sociale: supporto e riconoscimento da parte di un Lead presente sul floor.
+function careerLeadSupport(s, c, kind) {
+  if (!s || !s.isPlayer || !c || !playerMode || !playerMode.owns(s) || playerMode.view().isOver) return false;
+  const flag = kind === 'error' ? 'playerEncouraged' : 'playerRecognized';
+  if (c[flag]) return false;
+  const lead = game.staff.find(x => !x.isPlayer && x.role === 'lead' && !x.hidden && !x.gone && !onBreak(x) && isAvailable(x));
+  if (!lead) return false;
+  c[flag] = true;
+  const gain = kind === 'error' ? 2 : 1;
+  bump(s, 'mot', gain); say(lead, 'heart', 3);
+  log(kind === 'error'
+    ? `${lead.name} ti incoraggia: «L'errore si recupera insieme. Finisci la visita, poi prenditi una pausa.» Motivazione +${gain}.`
+    : `${lead.name} riconosce il tuo impegno con il cliente #${c.id}: motivazione +${gain}.`);
+  return true;
+}
+
 // Un momento di servizio: lo stress di chi serve pesa sull'esperienza, la competenza sugli errori
 const ERROR_TEXT = {
   point: 'manda il cliente nel posto sbagliato', express: 'sbaglia lo scontrino', accessori: 'consiglia l\'accessorio sbagliato',
@@ -1485,16 +1515,21 @@ function serve(s, c, weight = 1, errMul = 1) {
   if (!s.isPlayer) bump(s, 'comp', 0.08 * (1 - s.stats.comp / 120));
   // un cliente scortese pesa su chi lo serve
   if (c.rude) {
-    bump(s, 'stress', 4 * TIER[s.tier].stress); bump(s, 'mot', -1); c.exp -= 3;
+    bump(s, 'stress', 4 * TIER[s.tier].stress);
+    if (!s.isPlayer) bump(s, 'mot', -1);
+    c.exp -= 3;
     say(c, 'angry', 2);
     if (!c.rudeCounted) { c.rudeCounted = true; game.stats.rude++; log(`Un cliente scortese con ${s.name}`); }
   }
   if (Math.random() < errorChance(s, c) * weight * errMul) {
     c.exp -= 22; c.error = true;
     say(s, 'oops', 2);
-    bump(s, 'mot', -3);
+    if (!s.isPlayer) bump(s, 'mot', -3);
     bump(s, 'stress', s.isPlayer ? window.PLCareerProgression.errorStress(s.stats) : 3);
-    if (s.isPlayer && playerMode) playerMode.recordError();
+    if (s.isPlayer && playerMode) {
+      playerMode.recordError();
+      careerLeadSupport(s, c, 'error');
+    }
     game.stats.errors++;
     if (TIER[s.tier].area === 'bar') game.stats.errBar++;
     if (s.role === 'genius') game.stats.errRepair++;
@@ -1534,8 +1569,11 @@ function survey(c) {
   game.reviews.unshift({ t: game.time, score, value, text, staff: n, area: c.kind === 'genius' ? 'bar' : 'vendita' });
   say(c, 'r' + score, 3);
   if (c.servedBy) {
-    if (score === 5) bump(c.servedBy, 'mot', 3);
-    if (score <= 3) { bump(c.servedBy, 'mot', -2); bump(c.servedBy, 'stress', 1); }
+    if (score === 5 && !c.servedBy.isPlayer) bump(c.servedBy, 'mot', 3);
+    if (score <= 3) {
+      if (!c.servedBy.isPlayer) bump(c.servedBy, 'mot', -2);
+      bump(c.servedBy, 'stress', 1);
+    }
   }
 }
 const nps = area => {
@@ -1566,7 +1604,10 @@ function leave(c, outcome) {
   else if (outcome === 'rebooked') say(c, 'check', 2);
   else say(c, 'heart', 3);
   c.exp += { bought: 10, fixed: 12, session: 5, helped: 8 }[outcome] || 0;
-  if (c.servedBy && (outcome === 'bought' || outcome === 'fixed')) bump(c.servedBy, 'mot', 1);
+  if (c.servedBy && !c.servedBy.isPlayer && (outcome === 'bought' || outcome === 'fixed')) bump(c.servedBy, 'mot', 1);
+  if (playerMode && c.ownerId === 'PLAYER' && ['bought', 'helped', 'browsed'].includes(outcome)) {
+    careerLeadSupport(playerMode.player(), c, 'visit');
+  }
   survey(c);
   if (c.staff) { if (c.staff.customer === c) c.staff.customer = null; c.staff = null; }
   c.state = 'leaving';
@@ -1865,6 +1906,10 @@ function updateExpertHelp(s, dt) {
     if (h.time <= 0) {
       delete h.expert.helpRequester;
       bump(s, 'comp', 0.3); bump(h.expert, 'stress', 0.8);
+      if (s.isPlayer) {
+        bump(s, 'mot', 3); say(s, 'heart', 2);
+        log(`${h.expert.name} ti sostiene nel confronto: motivazione +3.`);
+      }
       h.customer.exp += 3; h.customer.expertHelped = true;
       game.stats.helpGiven++;
       h.phase = 'back'; s.state = 'fromExpert'; goTo(s, { x: h.x, y: h.y });
@@ -1889,7 +1934,11 @@ function updateStaff(s, dt) {
   if (game.time >= OPEN && game.time < CLOSE && !onBreak(s)) {
     if (BUSY.has(s.state) || s.customer) bump(s, 'stress', 0.08 * ROLE_STRESS[s.role] * TIER[s.tier].stress * T(s).stress * (ddOn('fun', 'squadra') && ddInvolved(s) ? 0.8 : 1) * (1 + 0.1 * F().sales) * (s.calmUntil > game.time ? 0.5 : 1) * (pushed(s) ? 1.4 : 1) * dt);
     else bump(s, 'stress', (s.post ? -0.03 : -0.05) * dt);
-    bump(s, 'mot', -0.015 * (1 - 0.3 * F().cel) * dt);
+    if (!s.isPlayer) bump(s, 'mot', -0.015 * (1 - 0.3 * F().cel) * dt);
+    else {
+      const climate = careerTeamClimate();
+      if (climate !== null) bump(s, 'mot', (climate - s.stats.mot) * Math.min(1, Math.max(0, dt) / 240));
+    }
   }
   if (s.wantsBreak && isAvailable(s)) startBreak(s);
   if (s.pendingSlot !== undefined && isAvailable(s)) { Object.assign(s, slotProps('floor', s.pendingSlot)); s.pendingSlot = undefined; s.state = 'idle'; goTo(s, s.home); }
@@ -1902,7 +1951,8 @@ function updateStaff(s, dt) {
       if (arrived) { s.state = 'onBreak'; s.hidden = true; s.until = game.time + 15; }
       break;
     case 'onBreak':
-      bump(s, 'stress', -1.5 * dt); bump(s, 'mot', 0.2 * dt);
+      bump(s, 'stress', -1.5 * dt);
+      if (!s.isPlayer) bump(s, 'mot', 0.2 * dt);
       if (game.time >= s.until) {
         if (s.isPlayer && playerMode) { bump(s, 'stress', -35); playerMode.completeBreak(); }
         s.hidden = false; s.x = DOOR.x; s.y = DOOR.y; s.state = 'fromBreak'; goTo(s, s.home);
@@ -2606,7 +2656,9 @@ function updatePlayerDebrief() {
     ['Turno di oggi', `${fmt(shift.start)}–${fmt(shift.end)} · ${shift.hours} ore`],
     ['Contratto del turno', `${shift.weeklyHours} ore/settimana · 5 giorni`],
     ['Stress a fine turno', Math.round(TEAM.Tu.stress)],
-    ['Competenza nel ruolo', `${Math.floor(TEAM.Tu.comp)} / 100`],
+    ['Motivazione a fine turno', Math.round(TEAM.Tu.mot)],
+    ['Apprendimento a fine turno', `${Math.round(window.PLCareerProgression.learningRate(TEAM.Tu) * 100)}%`],
+    ['Competenza nel ruolo', `${(Math.floor(TEAM.Tu.comp * 10) / 10).toLocaleString('it-IT')} / 100`],
     ['Clienti conclusi', p.served], ['Dispositivi consegnati', p.sales],
     ['Accessori', p.accessories], ['Servizi', p.services], ['Persone aiutate', p.helped],
     ['Setup completati', p.setups], ['Visite ancora aperte', p.open],

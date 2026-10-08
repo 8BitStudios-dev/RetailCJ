@@ -39,6 +39,11 @@
     return Math.max(0.8, 2.2 - 0.35 * (career.index + career.progress / career.max));
   }
 
+  function learningRate(profile) {
+    const stress = profile && Number.isFinite(profile.stress) ? Math.max(0, Math.min(100, profile.stress)) : 0;
+    return 1 - 0.0075 * stress;
+  }
+
   function errorStress(profile) {
     const career = view(profile);
     return Math.max(12, 55 - 12 * (career.index + career.progress / career.max));
@@ -58,5 +63,5 @@
     return next;
   }
 
-  root.PLCareerProgression = { roles, role, view, promote, learningTime, errorStress, contract, nextWorkday };
+  root.PLCareerProgression = { roles, role, view, promote, learningTime, learningRate, errorStress, contract, nextWorkday };
 })(window);

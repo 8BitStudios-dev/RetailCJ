@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 const CAREER_KEY = 'plgame.career.v1';
 const buttons = env => env.context.document.querySelectorAll('[data-app-update]');
 const statuses = env => env.context.document.querySelectorAll('[data-app-update-status]');
@@ -38,7 +38,7 @@ function assertVisitUnchanged(fixture) {
   assert.equal(player.customer, client);
   assert.equal(client.staff, player);
   assert.equal(env.game().time, time);
-  assert.equal(player.stats.comp, 7);
+  assert.equal(player.stats.comp, 7 * (1 - 0.0075 * 20));
   assert.equal(env.storage.get(CAREER_KEY), checkpoint, 'Refresh must keep the last durable checkpoint');
   assert.equal(env.storageCalls.length, storageCalls, 'Refresh does not read, clear or write storage');
 }

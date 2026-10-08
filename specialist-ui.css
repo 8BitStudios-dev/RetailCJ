@@ -48,6 +48,10 @@
 .playerEnergyBadge b { color: #a8c8ff; }
 .playerEnergyBadge.isHigh { border-color: #9c493e; }
 .playerEnergyBadge.isHigh b { color: var(--bad); }
+.playerLearning { margin-top: 5px; font-size: 10px; line-height: 1.45; color: #bdd5ff; }
+.playerFactors { margin-top: 7px; font-size: 10px; line-height: 1.45; color: var(--muted); }
+.playerFactors summary { cursor: pointer; }
+.playerFactors p { margin: 6px 0; }
 .playerQueue { margin-top: 9px; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
 .playerControls button { font-size: 11px; line-height: 1.3; min-height: 38px; }
 .playerNext { width: 100%; }
