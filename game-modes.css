@@ -13,6 +13,7 @@
   text-align: center;
 }
 .careerPath { grid-column: 1 / -1; min-width: 0; padding: 9px 10px; border: 1px solid #566176; border-radius: 5px; background: #252e3c; }
+.careerPath[hidden] { display: none; }
 .careerPathTitle { display: block; font-size: 11px; color: #d8e8ff; }
 .careerPathRoles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin: 6px 0; padding: 0; list-style: none; }
 .careerPathRoles li { min-width: 0; padding: 4px 2px; border: 1px solid #46566d; border-radius: 3px; text-align: center; font-size: 10px; color: #bbc6d6; overflow-wrap: anywhere; }

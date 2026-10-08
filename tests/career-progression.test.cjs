@@ -308,10 +308,16 @@ test('schema validation rejects invalid tiers, progress beyond 100 and out-of-ra
   }
 });
 
-test('the career screen exposes an exact progress bar and only enables the promotion at 100', () => {
+test('career panels stay hidden while a separate promotion appears only at 100', () => {
   const env = ready();
   for (const comp of [0, 99.6, 99.99, 100]) {
     setProgress(env, comp);
+    const careerPanel = env.get('playerPanel').querySelector('.playerCareer');
+    const promotion = env.get('careerPromote');
+    assert.equal(careerPanel.hidden, true);
+    assert.equal(env.get('modeChoices').querySelector('.careerPath').hidden, true);
+    assert.equal(careerPanel.contains(promotion), false, 'The promotion remains usable outside the hidden panel');
+    assert.equal(promotion.parentElement.hidden, comp < 100);
     const bar = env.get('careerProgress');
     assert.ok(bar);
     assert.equal(bar.getAttribute('role'), 'progressbar');
@@ -325,6 +331,8 @@ test('the career screen exposes an exact progress bar and only enables the promo
   env.get('careerPromote').click();
   assert.equal(env.view().role, 'Expert');
   assert.equal(competence(env), 0);
+  assert.equal(env.get('careerPromote').parentElement.hidden, true);
+  assert.equal(env.get('playerPanel').querySelector('.playerCareer').hidden, true);
   env.get('careerPromote').click();
   assert.equal(env.view().role, 'Expert');
   const ladder = env.get('playerPanel').querySelectorAll('.playerCareerRole');

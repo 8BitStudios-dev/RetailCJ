@@ -57,6 +57,7 @@
     status.setAttribute('role', 'status');
 
     const career = node('section', 'playerCareer', root);
+    career.hidden = true;
     career.setAttribute('aria-label', 'Il tuo percorso di Carriera');
     node('h3', 'playerCareerTitle', career, 'La tua Carriera');
     const ladder = node('ol', 'playerCareerRoles', career);
@@ -80,9 +81,11 @@
     careerBar.setAttribute('aria-valuemax', '100');
     const careerFill = node('span', '', careerBar);
     careerFill.setAttribute('aria-hidden', 'true');
-    const careerHint = node('p', 'playerCareerHint', career);
+    const promotion = node('div', 'playerPromotion', root);
+    promotion.hidden = true;
+    const careerHint = node('p', 'playerCareerHint', promotion);
     careerHint.id = 'careerPromotionHint';
-    const promote = button(career, 'promote', '', 'playerPromote on');
+    const promote = button(promotion, 'promote', '', 'playerPromote on');
     promote.id = 'careerPromote';
     promote.setAttribute('aria-describedby', 'careerPromotionHint');
 
@@ -137,7 +140,7 @@
     });
 
     refs = { root, name, role, status, career, careerRoles, careerLabel, careerValue, careerBar,
-      careerFill, careerHint, promote, currentTitle, description, state, started, progress,
+      careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     root.addEventListener('click', event => {
       const control = event.target.closest('button[data-specialist-action]');
@@ -159,7 +162,8 @@
     r.root.setAttribute('aria-label', 'Il tuo turno da ' + (view.role || 'Specialist'));
     setText(r.status, view.status || (view.isOver ? 'Turno concluso' : 'Pronto sul floor'));
     const career = view.career;
-    r.career.hidden = !career;
+    r.career.hidden = true;
+    r.promotion.hidden = !career || !career.nextRole || career.progress < 100;
     if (career) {
       const value = Math.max(0, Math.min(100, Number(career.progress) || 0));
       const displayed = Math.floor(value);

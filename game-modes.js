@@ -10,7 +10,7 @@
     {
       id: 'career',
       title: 'Carriera · Specialist',
-      description: 'Segui i clienti e fai crescere la competenza da 0 a 100 in ogni ruolo.'
+      description: 'Accompagna i clienti, offri un’esperienza e cresci con la pratica.'
     }
   ];
   let refs = null;
@@ -39,7 +39,7 @@
     const resumeCard = node('div', 'careerResume', root);
     resumeCard.id = 'careerResumeCard';
     resumeCard.hidden = true;
-    node('strong', 'careerResumeTitle', resumeCard, 'La tua Carriera');
+    node('strong', 'careerResumeTitle', resumeCard, 'Carriera salvata');
     const summary = node('p', 'careerResumeSummary', resumeCard);
     const resumeDescription = node('p', 'careerResumeDescription', resumeCard);
     const resume = node('button', 'careerResumeButton on', resumeCard, 'Riprendi Carriera');
@@ -50,6 +50,7 @@
     notice.id = 'careerSaveNotice';
     notice.setAttribute('role', 'status');
     const careerPath = node('div', 'careerPath', root);
+    careerPath.hidden = true;
     node('strong', 'careerPathTitle', careerPath, 'Percorso vendita');
     const path = node('ol', 'careerPathRoles', careerPath);
     path.setAttribute('aria-label', 'Da Specialist a Lead');
@@ -176,7 +177,7 @@
       if (saved) {
         const day = saved.phase === 'completed' ? saved.day % 31 + 1 : saved.day;
         const checkpointRole = window.PLCareerProgression.view(saved.profile);
-        setText(r.summary, `${day} gennaio · ${checkpointRole.role} · Competenza ${Math.floor(checkpointRole.progress)} / 100`);
+        setText(r.summary, `${day} gennaio · ${checkpointRole.role}`);
         setText(r.resumeDescription, saved.phase === 'completed'
           ? 'Turno concluso. Riparti dall’apertura del giorno successivo.'
           : 'Riparti dall’apertura di questa giornata con la crescita dei turni già conclusi.');
@@ -196,7 +197,7 @@
         if (button.dataset.gameMode === 'career') {
           setText(button.querySelector('.gameModeTitle'), saved ? 'Nuova Carriera' : 'Carriera · Specialist');
           setText(button.querySelector('.gameModeDescription'), saved
-            ? 'Inizia dal 7 gennaio come Specialist a 0/100.'
+            ? 'Inizia dal 7 gennaio come Specialist.'
             : MODES.find(item => item.id === 'career').description);
         }
       });

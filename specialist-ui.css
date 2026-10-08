@@ -10,6 +10,7 @@
 .playerRole { padding: 2px 5px; border: 1px solid var(--line); border-radius: 3px; color: #a8c8ff; font-size: 10px; }
 .playerStatus { margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .playerCareer { margin-top: 10px; padding: 9px; background: #25354c; border: 1px solid #6389be; border-radius: 5px; min-width: 0; }
+.playerPromotion { margin-top: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
 .playerCareerTitle { margin: 0 0 7px; font-size: 11px; color: #d8e8ff; }
 .playerCareerRoles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
 .playerCareerRole { min-width: 0; padding: 4px 2px; border: 1px solid #46566d; border-radius: 3px; text-align: center; color: #b1b9c7; }
