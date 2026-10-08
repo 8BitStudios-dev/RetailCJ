@@ -1,0 +1,51 @@
+.playerPanel {
+  border-color: #5274a2;
+  min-width: 0;
+}
+.playerPanel [hidden] { display: none !important; }
+.playerPanel[hidden] { display: none !important; }
+.playerHeader { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.playerTitle { margin: 0; font-size: 15px; line-height: 1.3; }
+.playerIdentity { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; font-size: 12px; }
+.playerRole { padding: 2px 5px; border: 1px solid var(--line); border-radius: 3px; color: #a8c8ff; font-size: 10px; }
+.playerStatus { margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.playerCurrent { margin-top: 10px; padding: 8px; background: #1f1f27; border: 1px solid var(--line); border-radius: 4px; }
+.playerCurrentTitle { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.playerDescription { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.playerState { margin-top: 6px; font-size: 12px; color: #c8dcff; }
+.playerStarted { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+.playerProgress { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; margin: 8px 0 0; list-style: none; }
+.playerStep { padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 10px; }
+.playerStep.isDone { color: var(--good); border-color: #37563d; }
+.playerStep.isCurrent { color: #fff; background: var(--accent); border-color: var(--accent); }
+.playerMetrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.playerMetric { min-width: 0; text-align: center; }
+.playerMetric strong { display: block; font-size: 20px; line-height: 1.15; }
+.playerMetric span { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+.playerExtraStats { margin-top: 6px; font-size: 10px; line-height: 1.5; color: var(--muted); text-align: center; }
+.playerEnergy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
+.playerEnergyBadge { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 4px; padding: 4px; border: 1px solid var(--line); border-radius: 3px; min-width: 0; font-size: 9px; }
+.playerEnergyBadge b { color: #a8c8ff; }
+.playerEnergyBadge.isHigh { border-color: #9c493e; }
+.playerEnergyBadge.isHigh b { color: var(--bad); }
+.playerQueue { margin-top: 9px; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+.playerControls button { font-size: 11px; line-height: 1.3; min-height: 38px; }
+.playerNext { width: 100%; }
+.playerSecondaryActions { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 6px; margin-top: 6px; }
+.playerSecondaryActions button { min-width: 0; padding: 6px; }
+.playerMessage { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.playerRecent { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.playerRecent h3 { margin: 0 0 5px; font-size: 10px; }
+.playerHistory { list-style: none; margin: 0; padding: 0; font-size: 10px; }
+.playerHistory li { padding: 3px 0; }
+.playerHistory strong { color: var(--text); font-weight: 400; }
+.playerHistoryTime { color: var(--muted); float: right; margin-left: 8px; }
+.playerHistoryOutcome { color: var(--muted); clear: both; overflow-wrap: anywhere; }
+.playerPanel button:focus-visible { outline: 2px solid #a8c8ff; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .playerPanel { position: static; width: 100%; }
+  .playerTitle { font-size: 16px; }
+  .playerControls button { min-height: 44px; font-size: 12px; }
+  .playerEnergyBadge { font-size: 10px; }
+  .playerDescription, .playerQueue, .playerMessage { font-size: 12px; }
+}
