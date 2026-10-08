@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const {Blob} = require('node:buffer');
+const {URL: NodeURL} = require('node:url');
 
 const projectDirectory = path.resolve(__dirname, '..');
 const gameDirectory = fs.existsSync(path.join(projectDirectory, 'index.html'))
@@ -22,6 +23,9 @@ function makeEnvironment(options = {}) {
   const objectURLs = new Map();
   const revokedURLs = [];
   const downloads = [];
+  const navigations = [];
+  const navigationAttempts = [];
+  const storageCalls = [];
   let nextObjectURL = 0;
   let document;
 
@@ -234,22 +238,33 @@ function makeEnvironment(options = {}) {
   };
   const storage = options.storage ?? new Map();
   const storageOperation = (operation, callback) => (...args) => {
+    storageCalls.push({operation, args: [...args]});
     if (options.storageError === 'all' || options.storageError === operation) {
       throw new Error('Storage access denied');
     }
     return callback(...args);
   };
+  class BrowserURL extends NodeURL {
+    static createObjectURL(blob) {
+      const url = `blob:retailcj-test/${++nextObjectURL}`;
+      objectURLs.set(url, blob);
+      return url;
+    }
+    static revokeObjectURL(url) { objectURLs.delete(url); revokedURLs.push(url); }
+  }
+  const location = {
+    href: options.locationHref ?? 'http://retailcj.test/?foo=bar#game',
+    replace(value) {
+      const url = String(value);
+      navigationAttempts.push(url);
+      if (options.navigationError) throw new Error('Navigation is unavailable');
+      navigations.push(url);
+    },
+  };
   const context = {
     console, document, Math: math,
     Blob, TextEncoder, TextDecoder,
-    URL: {
-      createObjectURL(blob) {
-        const url = `blob:retailcj-test/${++nextObjectURL}`;
-        objectURLs.set(url, blob);
-        return url;
-      },
-      revokeObjectURL(url) { objectURLs.delete(url); revokedURLs.push(url); },
-    },
+    URL: BrowserURL, location,
     performance: { now: () => 0 },
     requestAnimationFrame() { counters.animationRequests++; },
     matchMedia: () => ({ matches: false }),
@@ -268,7 +283,7 @@ function makeEnvironment(options = {}) {
   context.window = context;
   vm.createContext(context);
   for (const match of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
-    const file = match[1];
+    const file = match[1].split(/[?#]/, 1)[0];
     const source = path.join(gameDirectory, file);
     if (!fs.existsSync(source)) throw new Error('Specialist integration is not ready: missing ' + file);
     vm.runInContext(fs.readFileSync(source, 'utf8'), context, {filename: file});
@@ -279,6 +294,7 @@ function makeEnvironment(options = {}) {
   const evaluate = expression => vm.runInContext(expression, context, {timeout: 10000});
   return {
     html, context, counters, evaluate, storage, downloads, objectURLs, revokedURLs,
+    navigations, navigationAttempts, storageCalls,
     get: id => elements.get(id) || null,
     mode: () => evaluate('playerMode'),
     game: () => evaluate('game'),

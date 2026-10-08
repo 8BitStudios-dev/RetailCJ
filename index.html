@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
+<meta name="application-version" content="1.4.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -158,8 +159,9 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css">
-<link rel="stylesheet" href="game-modes.css">
+<link rel="stylesheet" href="specialist-ui.css?v=1.4.0">
+<link rel="stylesheet" href="game-modes.css?v=1.4.0">
+<link rel="stylesheet" href="app-update.css?v=1.4.0">
 </head>
 <body>
 <div class="app">
@@ -178,6 +180,8 @@
     </div>
     <div class="npsRow" id="npsRow"></div>
     <div class="modeBar"><span id="modeBadge"></span><button id="changeMode">Cambia modalità</button></div>
+    <div class="appVersionRow"><span class="appVersionLabel" id="appVersion" data-app-version></span><button class="appUpdateButton" id="appUpdate" data-app-update>Aggiorna app</button></div>
+    <p class="appUpdateStatus" data-app-update-status role="status"></p>
     <div class="goalRow" id="goalRow" hidden></div>
   </div>
   <div class="stage">
@@ -185,6 +189,8 @@
     <div class="tip" id="tip" hidden><div class="tipText"></div><div class="acts"></div></div>
     <div class="overlay show" id="intro">
       <div class="introBox">
+        <div class="appVersionRow"><span class="appVersionLabel" id="introAppVersion" data-app-version></span><button class="appUpdateButton" id="introAppUpdate" data-app-update>Aggiorna app</button></div>
+        <p class="appUpdateStatus" data-app-update-status role="status"></p>
         <img id="introArt" src="assets/piazza-liberty-intro.png" width="220" height="228" alt="Piazza Liberty in pixel art: cascata di vetro e scalinata verso lo store">
         <div class="introTitle">PLGame</div>
         <div class="sub">Apple Piazza Liberty · Milano</div>
@@ -293,14 +299,15 @@
   </div>
 </div>
 
-<script src="graphics-interior.js"></script>
-<script src="graphics-walls.js"></script>
-<script src="graphics-people.js"></script>
-<script src="career-progression.js"></script>
-<script src="career-save.js"></script>
-<script src="specialist-mode.js"></script>
-<script src="specialist-ui.js"></script>
-<script src="game-modes.js"></script>
+<script src="graphics-interior.js?v=1.4.0"></script>
+<script src="graphics-walls.js?v=1.4.0"></script>
+<script src="graphics-people.js?v=1.4.0"></script>
+<script src="career-progression.js?v=1.4.0"></script>
+<script src="career-save.js?v=1.4.0"></script>
+<script src="specialist-mode.js?v=1.4.0"></script>
+<script src="specialist-ui.js?v=1.4.0"></script>
+<script src="game-modes.js?v=1.4.0"></script>
+<script src="app-update.js?v=1.4.0"></script>
 <script>
 'use strict';
 
@@ -3095,12 +3102,13 @@ window.PLGameModes.bind({
   resume: resumeCareer,
   import: importCareer,
 });
+window.PLAppUpdate.bind({ hasActiveShift: () => Boolean(game && !game.briefing && !game.over) });
 newDay(7);
 if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').classList.remove('show'); }
 updatePanel();
 requestAnimationFrame(frame);
 // per i test: avanza la simulazione senza aspettare
-window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, promoteCareer, showModes, closeModes,
+window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, promoteCareer, refreshApp: window.PLAppUpdate.refresh, showModes, closeModes,
   get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 </script>
 </body>

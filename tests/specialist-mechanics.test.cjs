@@ -184,8 +184,8 @@ function resumeOperations(env) {
 
 test('the page enables Specialist by default and creates exactly one persistent identity', () => {
   const env = ready();
-  assert.match(env.html, /src="specialist-mode\.js"/);
-  assert.match(env.html, /src="specialist-ui\.js"/);
+  assert.match(env.html, /src="specialist-mode\.js(?:\?[^\"]*)?"/);
+  assert.match(env.html, /src="specialist-ui\.js(?:\?[^\"]*)?"/);
   const player = env.mode().player();
   assert.equal(player.id, 'PLAYER');
   assert.equal(player.name, 'Tu');

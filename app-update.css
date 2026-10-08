@@ -1,0 +1,16 @@
+.appVersionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.appVersionLabel { color: #c0c6d1; font-size: 11px; white-space: nowrap; }
+.appUpdateButton, .introBox .appUpdateButton { min-height: 36px; padding: 5px 8px; font-size: 11px; }
+.appUpdateButton:focus-visible { outline: 2px solid #a8c8ff; outline-offset: 2px; }
+.appUpdateStatus { margin: 5px 0 0; font-size: 11px; line-height: 1.4; color: #d8e8ff; }
+.appUpdateStatus:empty { display: none; }
+.introBox .appVersionRow { margin-top: 0; text-align: left; }
+.introBox .appUpdateStatus { margin: 0; text-align: left; }
