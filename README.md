@@ -23,7 +23,7 @@ Apri http://localhost:8000 nel browser.
 Con Node.js installato:
 
 ```sh
-node --test tests/specialist-mechanics.test.cjs
+node --test tests/*.test.cjs
 ```
 
 ## Origine
@@ -31,3 +31,7 @@ node --test tests/specialist-mechanics.test.cjs
 Copiato dalla cartella `plgame` di [MuccaUgo/store-tasks](https://github.com/MuccaUgo/store-tasks/tree/aa955cf4f155341a9ae7b52f642db15f3de7fc99/plgame), commit `aa955cf4f155341a9ae7b52f642db15f3de7fc99`.
 
 Il gioco si trova ora alla radice della repository. È inclusa anche l’icona Apple originale, con il riferimento aggiornato per questo percorso.
+
+## Salvataggio della Carriera
+
+La Carriera salva automaticamente giorno, motivazione, stress e competenza all’apertura e a fine turno, nello stesso browser. Dal menu iniziale, **Riprendi Carriera** recupera il progresso salvato. Un turno interrotto riparte dall’apertura; un turno completato prosegue dal giorno successivo. La modalità Osservazione conserva il salvataggio della Carriera. **Nuova Carriera** richiede conferma prima di sostituirlo.

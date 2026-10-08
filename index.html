@@ -296,6 +296,7 @@
 <script src="graphics-interior.js"></script>
 <script src="graphics-walls.js"></script>
 <script src="graphics-people.js"></script>
+<script src="career-save.js"></script>
 <script src="specialist-mode.js"></script>
 <script src="specialist-ui.js"></script>
 <script src="game-modes.js"></script>
@@ -497,9 +498,13 @@ const SESSION_TITLES = ['Foto con iPhone', 'Disegno su iPad', 'Musica con Garage
 const RATE = { 10: 18, 11: 24, 12: 28, 13: 28, 14: 26, 15: 27, 16: 29, 17: 33, 18: 34, 19: 22 };   // uno store pieno quasi tutto il giorno
 
 let game;
-let chosenMode = window.PL_SPECIALIST_MODE === false ? 'observation' : 'career';
+let chosenMode = window.PL_SPECIALIST_MODE !== undefined
+  ? (window.PL_SPECIALIST_MODE === false ? 'observation' : 'career')
+  : (window.PLCareerSave.loadMode() || 'career');
 let SPECIALIST_ON = chosenMode === 'career';
 let modePicking = false;
+let careerStarted = false;
+let careerCheckpoint = window.PLCareerSave.load();
 
 // La squadra: 43 persone, tutte full time, 5 giorni su 7. Ogni livello ha un tetto di competenza,
 // una resistenza allo stress e un vantaggio proprio (vendita, riparazioni, conversione dal Today at Apple).
@@ -634,6 +639,7 @@ function newDay(dayOfMonth, opts = {}) {
   if (playerMode) playerMode.newDay(game);
   buildAgenda((opts.seed !== undefined ? opts.seed : Math.floor(nativeRandom() * 1e9)) + 7);
   if (STRATEGY_ON && opts.formation && opts.formation !== game.formation) changeFormation(opts.formation, 'open');
+  if (careerStarted) saveCareerCheckpoint('start');
   showBrief();
 }
 
@@ -1080,6 +1086,10 @@ document.getElementById('ckBody').addEventListener('click', ev => {
 });
 
 function startDay(opts = {}) {
+  if (SPECIALIST_ON && !careerStarted) {
+    careerStarted = true;
+    saveCareerCheckpoint('start');
+  }
   game.focus = { op: opts.op || 0, sales: opts.sales || 0, cel: opts.cel || 0 };   // i gettoni restano solo per le simulazioni di prova
   game.dd = opts.dd ? { target: DD_TOPICS.find(x => x.key === opts.dd.topic).targets[0][0], format: 'breve', who: 'tutti', coach: '', ...opts.dd } : game.dd || null;
   game.briefing = false;
@@ -2528,6 +2538,7 @@ function teamDelta() {
 
 function endDay() {
   game.over = true;
+  saveCareerCheckpoint('completed');
   document.getElementById('dbTitle').textContent = SPECIALIST_ON ? 'Il tuo turno è finito' : 'La giornata è finita';
   document.getElementById('dbPlayerStats').hidden = !playerMode;
   document.getElementById('dbStoreResults').open = !playerMode;
@@ -2767,7 +2778,7 @@ const ROLE_LABEL = { point: 'Point', express: 'Cassa Express', accessori: 'Speci
 let lastPanel = 0;
 function updatePanel() {
   window.PLSpecialistUI.render(playerMode ? playerMode.view() : { enabled: false });
-  window.PLGameModes.render(chosenMode);
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available());
   document.getElementById('clock').textContent = fmt(Math.max(OPEN - 2, game.time));
   const open = game.time >= OPEN && game.time < CLOSE;
   document.getElementById('date').textContent =
@@ -2909,11 +2920,7 @@ document.getElementById('dbRetry').addEventListener('click', () => { document.ge
 document.getElementById('dbNextLv').addEventListener('click', () => { document.getElementById('debrief').classList.remove('show'); startLevel(game.levelIndex + 1); });
 document.getElementById('dbLevels').addEventListener('click', showLevels);
 document.getElementById('dbLevels').hidden = !STRATEGY_ON;
-document.getElementById('nextDay').addEventListener('click', () => {
-  document.getElementById('debrief').classList.remove('show');
-  overnight(game.focus);
-  newDay(game.day % 31 + 1);
-});
+document.getElementById('nextDay').addEventListener('click', advanceDay);
 
 // ─────────────────────────────────────────────────────────────
 // Ciclo principale a passo fisso
@@ -2956,7 +2963,7 @@ function showModes() {
   document.getElementById('introText').textContent = INTRO_LINE;
   document.getElementById('introBack').hidden = false;
   document.getElementById('intro').classList.add('show');
-  window.PLGameModes.render(chosenMode);
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available());
 }
 function closeModes() {
   modePicking = false;
@@ -2979,29 +2986,79 @@ window.PLSpecialistUI.bind({
   pause: () => { if (playerMode) playerMode.requestBreak(); updatePanel(); },
   focus: () => { if (playerMode) playerMode.focus(); updatePanel(); },
 });
-function selectMode(mode) {
+function saveCareerCheckpoint(phase) {
+  if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;
+  const { mot, stress, comp } = TEAM.Tu;
+  careerCheckpoint = { version: 1, day: game.day, phase, profile: { mot, stress, comp } };
+  window.PLCareerSave.save(careerCheckpoint);
+}
+
+function restoreCareerProfile(snapshot) {
+  TEAM.Tu = { tier: 'S', cap: 75, off: [], vacWeek: -1, ...snapshot.profile };
+}
+
+function advanceDay() {
+  if (!game.over) return false;
+  document.getElementById('debrief').classList.remove('show');
+  const day = game.day % 31 + 1;
+  overnight(game.focus);
+  newDay(day);
+  updatePanel();
+  return true;
+}
+
+function beginMode(mode, day) {
   if (!['observation', 'career'].includes(mode)) return false;
   chosenMode = mode;
   SPECIALIST_ON = mode === 'career';
+  careerStarted = SPECIALIST_ON;
+  window.PLCareerSave.saveMode(mode);
   playerMode = SPECIALIST_ON ? createPlayerMode() : null;
   closeModes();
   document.getElementById('introBack').hidden = true;
   for (const id of ['levels', 'check', 'moment', 'plan']) document.getElementById(id).classList.remove('show');
   seedRandom(null);
-  newDay(7);
+  newDay(day);
   game.speed = 1;
   acc = 0;
   document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', b.dataset.s === '1'));
   updatePanel();
   return true;
 }
-window.PLGameModes.bind({ choose: selectMode });
+
+function selectMode(mode) {
+  if (!['observation', 'career'].includes(mode)) return false;
+  if (mode === 'career') delete TEAM.Tu;
+  return beginMode(mode, 7);
+}
+
+function resumeCareer() {
+  if (!careerCheckpoint) return false;
+  const saved = careerCheckpoint;
+  restoreCareerProfile(saved);
+  SPECIALIST_ON = true;
+  let day = saved.day;
+  if (saved.phase === 'completed') {
+    overnight();
+    day = day % 31 + 1;
+  }
+  return beginMode('career', day);
+}
+
+window.PLGameModes.bind({
+  choose: mode => {
+    if (mode === 'career' && careerCheckpoint && typeof window.confirm === 'function' &&
+        !window.confirm('Iniziare una nuova Carriera? Il giorno e la crescita salvati saranno sostituiti.')) return;
+    selectMode(mode);
+  },
+  resume: resumeCareer,
+});
 newDay(7);
 if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').classList.remove('show'); }
 updatePanel();
 requestAnimationFrame(frame);
 // per i test: avanza la simulazione senza aspettare
-window.__sim = { step, startDay, newDay, selectMode, showModes, closeModes,
+window.__sim = { step, startDay, newDay, selectMode, resumeCareer, showModes, closeModes,
   get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 </script>
 </body>

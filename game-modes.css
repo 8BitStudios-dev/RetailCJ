@@ -12,6 +12,19 @@
   color: var(--muted);
   text-align: center;
 }
+.careerResume {
+  grid-column: 1 / -1;
+  padding: 12px;
+  background: #263b5e;
+  border: 1px solid #76a7ff;
+  border-radius: 6px;
+  text-align: left;
+}
+.careerResume[hidden] { display: none; }
+.careerResumeTitle { display: block; font-size: 14px; }
+.careerResumeSummary { margin: 4px 0; font-size: 13px; color: #d8e8ff; }
+.careerResumeDescription { margin: 4px 0 10px; font-size: 11px; color: #c0c6d1; }
+.introBox .careerResumeButton { width: 100%; min-height: 44px; font-size: 14px; }
 .introBox #modeChoices .gameModeChoice {
   display: flex;
   flex-direction: column;

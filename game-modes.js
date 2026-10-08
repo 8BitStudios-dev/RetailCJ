@@ -16,6 +16,8 @@
   let refs = null;
   let actions = {};
   let currentMode = null;
+  let currentSave = null;
+  let storageAvailable = true;
 
   function node(tag, className, parent, content) {
     const element = document.createElement(tag);
@@ -32,7 +34,19 @@
 
     root.replaceChildren();
     root.setAttribute('aria-label', 'Scegli la modalità di gioco');
-    node('p', 'gameModeNotice', root, 'Scegliere una modalità avvia una nuova giornata.');
+    const resumeCard = node('div', 'careerResume', root);
+    resumeCard.id = 'careerResumeCard';
+    resumeCard.hidden = true;
+    node('strong', 'careerResumeTitle', resumeCard, 'La tua Carriera');
+    const summary = node('p', 'careerResumeSummary', resumeCard);
+    const resumeDescription = node('p', 'careerResumeDescription', resumeCard);
+    const resume = node('button', 'careerResumeButton on', resumeCard, 'Riprendi Carriera');
+    resume.id = 'modeResumeCareer';
+    resume.type = 'button';
+    resume.dataset.careerAction = 'resume';
+    const notice = node('p', 'gameModeNotice', root);
+    notice.id = 'careerSaveNotice';
+    notice.setAttribute('role', 'status');
     const buttons = MODES.map(mode => {
       const button = node('button', 'gameModeChoice', root);
       button.type = 'button';
@@ -43,20 +57,48 @@
       return button;
     });
     root.addEventListener('click', event => {
+      const resumeButton = event.target.closest('button[data-career-action="resume"]');
+      if (resumeButton && root.contains(resumeButton)) {
+        if (typeof actions.resume === 'function') actions.resume();
+        return;
+      }
       const button = event.target.closest('button[data-game-mode]');
       if (!button || !root.contains(button) || button.disabled) return;
       if (typeof actions.choose === 'function') actions.choose(button.dataset.gameMode);
     });
-    refs = { root, buttons };
+    refs = { root, buttons, resumeCard, summary, resumeDescription, notice };
     return refs;
   }
 
-  function render(mode) {
+  function setText(element, text) {
+    if (element.textContent !== text) element.textContent = text;
+  }
+
+  function render(mode, saved = currentSave, available = storageAvailable) {
     currentMode = MODES.some(item => item.id === mode) ? mode : null;
+    currentSave = saved;
+    storageAvailable = available;
     const r = ensure();
     if (r) {
+      r.resumeCard.hidden = !saved;
+      if (saved) {
+        const day = saved.phase === 'completed' ? saved.day % 31 + 1 : saved.day;
+        setText(r.summary, `${day} gennaio · Competenza ${Math.round(saved.profile.comp)}`);
+        setText(r.resumeDescription, saved.phase === 'completed'
+          ? 'Turno concluso. Riparti dall’apertura del giorno successivo.'
+          : 'Riparti dall’apertura di questa giornata con la crescita dei turni già conclusi.');
+      }
+      setText(r.notice, available
+        ? 'La Carriera si salva all’apertura e a fine turno, in questo browser.'
+        : 'Il browser non consente il salvataggio. I progressi restano solo in questa sessione.');
       r.buttons.forEach(button => {
         button.classList.toggle('isSelected', button.dataset.gameMode === currentMode);
+        if (button.dataset.gameMode === 'career') {
+          setText(button.querySelector('.gameModeTitle'), saved ? 'Nuova Carriera' : 'Carriera · Specialist');
+          setText(button.querySelector('.gameModeDescription'), saved
+            ? 'Inizia dal 7 gennaio con uno Specialist alle prime armi.'
+            : MODES.find(item => item.id === 'career').description);
+        }
       });
     }
     const badge = document.getElementById('modeBadge');

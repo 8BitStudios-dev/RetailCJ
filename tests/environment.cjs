@@ -5,7 +5,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 
-const gameDirectory = path.resolve(__dirname, '..');
+const projectDirectory = path.resolve(__dirname, '..');
+const gameDirectory = fs.existsSync(path.join(projectDirectory, 'index.html'))
+  ? projectDirectory
+  : path.join(projectDirectory, 'dist');
 
 // This harness executes the actual page and modules. Canvas drawing is checked
 // for valid arguments; gameplay, state transitions and dispatch are not mocked.
@@ -14,6 +17,7 @@ function makeEnvironment(options = {}) {
   const elements = new Map();
   const counters = { surfaces: 0, fills: 0, images: 0, animationRequests: 0 };
   const documentListeners = new Map();
+  const windowListeners = new Map();
   let document;
 
   function matches(element, selector) {
@@ -206,19 +210,34 @@ function makeEnvironment(options = {}) {
     randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
     return randomState / 4294967296;
   };
-  const storage = new Map();
+  const storage = options.storage ?? new Map();
+  const storageOperation = (operation, callback) => (...args) => {
+    if (options.storageError === 'all' || options.storageError === operation) {
+      throw new Error('Storage access denied');
+    }
+    return callback(...args);
+  };
   const context = {
     console, document, Math: math,
     performance: { now: () => 0 },
     requestAnimationFrame() { counters.animationRequests++; },
     matchMedia: () => ({ matches: false }),
-    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    localStorage: {
+      getItem: storageOperation('read', key => storage.get(String(key)) ?? null),
+      setItem: storageOperation('write', (key, value) => storage.set(String(key), String(value))),
+      removeItem: storageOperation('write', key => storage.delete(String(key))),
+    },
+    addEventListener(type, handler) {
+      if (!windowListeners.has(type)) windowListeners.set(type, []);
+      windowListeners.get(type).push(handler);
+    },
     setTimeout, clearTimeout,
   };
   if (options.specialistMode !== undefined) context.PL_SPECIALIST_MODE = options.specialistMode;
   context.window = context;
   vm.createContext(context);
-  for (const file of ['graphics-interior.js', 'graphics-walls.js', 'graphics-people.js', 'specialist-mode.js', 'specialist-ui.js', 'game-modes.js']) {
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
+    const file = match[1];
     const source = path.join(gameDirectory, file);
     if (!fs.existsSync(source)) throw new Error('Specialist integration is not ready: missing ' + file);
     vm.runInContext(fs.readFileSync(source, 'utf8'), context, {filename: file});
@@ -228,11 +247,15 @@ function makeEnvironment(options = {}) {
 
   const evaluate = expression => vm.runInContext(expression, context, {timeout: 10000});
   return {
-    html, context, counters, evaluate,
+    html, context, counters, evaluate, storage,
     get: id => elements.get(id) || null,
     mode: () => evaluate('playerMode'),
     game: () => evaluate('game'),
     view: () => JSON.parse(JSON.stringify(evaluate('playerMode.view()'))),
+    dispatchWindow(type, payload = {}) {
+      const event = { type, target: context, ...payload };
+      for (const handler of windowListeners.get(type) || []) handler(event);
+    },
     advance(minutes, dt = 0.05) {
       evaluate(`for (let remaining = ${minutes}; remaining > 0; remaining -= ${dt}) step(Math.min(${dt}, remaining));`);
     },
