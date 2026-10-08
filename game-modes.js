@@ -68,6 +68,12 @@
       node('span', 'gameModeDescription', button, mode.description);
       return button;
     });
+    const welcome = node('button', 'careerWelcomeRead', root, 'Rileggi il benvenuto del Lead');
+    welcome.id = 'careerWelcomeRead';
+    welcome.type = 'button';
+    welcome.addEventListener('click', () => {
+      if (!importing && typeof actions.welcome === 'function') actions.welcome();
+    });
     const backup = node('div', 'careerBackup', root);
     backup.setAttribute('aria-label', 'Backup della Carriera');
     const exportButton = node('button', 'careerBackupButton', backup, 'Esporta Carriera');
@@ -143,7 +149,7 @@
       if (typeof actions.choose === 'function') actions.choose(button.dataset.gameMode);
     });
     refs = { root, buttons, resumeCard, summary, resumeDescription, notice, resume, pathRoles,
-      exportButton, importButton, backupStatus };
+      exportButton, importButton, backupStatus, welcome };
     return refs;
   }
 
@@ -163,6 +169,7 @@
       r.exportButton.disabled = importing || !saved;
       r.importButton.disabled = importing;
       r.resume.disabled = importing;
+      r.welcome.disabled = importing;
       const back = document.getElementById('introBack');
       if (back) back.disabled = importing;
       r.resumeCard.hidden = !saved;

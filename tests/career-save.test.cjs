@@ -209,7 +209,13 @@ test('the New Career confirmation preserves the active visit when cancelled and 
   let confirmations = 0;
   env.context.confirm = () => { confirmations++; return false; };
   env.get('modeCareer').click();
+  assert.equal(confirmations, 0, 'Opening the guide must not ask to replace the career');
+  env.get('careerWelcomeNext').click();
+  env.get('careerWelcomeNext').click();
+  assert.equal(confirmations, 0, 'Only the final action can replace the career');
+  env.get('careerWelcomeNext').click();
   assert.equal(confirmations, 1);
+  assert.equal(env.context.PLCareerWelcome.active(), true, 'Declining leaves the final guide page open');
   assert.equal(env.game().day, 17);
   assert.equal(env.game().time, time);
   assert.equal(env.mode().player(), player);
@@ -218,7 +224,7 @@ test('the New Career confirmation preserves the active visit when cancelled and 
   assert.deepEqual(load(env), value);
 
   env.context.confirm = () => { confirmations++; return true; };
-  env.get('modeCareer').click();
+  env.get('careerWelcomeNext').click();
   assert.equal(confirmations, 2);
   assert.equal(env.game().day, 7);
   assert.deepEqual(profile(env), defaults);

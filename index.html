@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.4.0">
+<meta name="application-version" content="1.5.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -159,9 +159,10 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.4.0">
-<link rel="stylesheet" href="game-modes.css?v=1.4.0">
-<link rel="stylesheet" href="app-update.css?v=1.4.0">
+<link rel="stylesheet" href="specialist-ui.css?v=1.5.0">
+<link rel="stylesheet" href="game-modes.css?v=1.5.0">
+<link rel="stylesheet" href="app-update.css?v=1.5.0">
+<link rel="stylesheet" href="career-welcome.css?v=1.5.0">
 </head>
 <body>
 <div class="app">
@@ -191,12 +192,34 @@
       <div class="introBox">
         <div class="appVersionRow"><span class="appVersionLabel" id="introAppVersion" data-app-version></span><button class="appUpdateButton" id="introAppUpdate" data-app-update>Aggiorna app</button></div>
         <p class="appUpdateStatus" data-app-update-status role="status"></p>
+        <div class="introMenu" id="introMenu">
         <img id="introArt" src="assets/piazza-liberty-intro.png" width="220" height="228" alt="Piazza Liberty in pixel art: cascata di vetro e scalinata verso lo store">
         <div class="introTitle">PLGame</div>
         <div class="sub">Apple Piazza Liberty · Milano</div>
         <div class="introSay"><span id="introText"></span><span class="caret">▌</span></div>
         <div id="modeChoices"></div>
         <button id="introBack" hidden>Torna al gioco</button>
+        </div>
+        <section class="careerWelcome" id="careerWelcome" hidden aria-labelledby="careerWelcomeTitle">
+          <div class="welcomeLead">
+            <svg class="welcomePortrait" viewBox="0 0 64 64" role="img" aria-label="Cristina, Lead, in pixel art" shape-rendering="crispEdges">
+              <rect x="18" y="6" width="28" height="8" fill="#493b38"/><rect x="14" y="14" width="36" height="28" fill="#493b38"/>
+              <rect x="22" y="16" width="20" height="24" fill="#e0a57d"/><rect x="18" y="22" width="28" height="12" fill="#e0a57d"/>
+              <rect x="24" y="24" width="4" height="4" fill="#272b35"/><rect x="36" y="24" width="4" height="4" fill="#272b35"/>
+              <rect x="28" y="34" width="8" height="2" fill="#a75f56"/><rect x="28" y="40" width="8" height="6" fill="#e0a57d"/>
+              <rect x="14" y="46" width="36" height="18" fill="#286ad5"/><rect x="8" y="52" width="48" height="12" fill="#286ad5"/>
+              <rect x="36" y="52" width="6" height="6" fill="#f2f5ff"/>
+            </svg>
+            <div><strong>Cristina · Lead</strong><span>Il tuo benvenuto nella squadra</span></div>
+          </div>
+          <p class="welcomeStep" id="careerWelcomeStep"></p>
+          <ol class="welcomeSteps" id="careerWelcomeSteps" aria-label="Passaggi del benvenuto"><li>Il floor</li><li>L’esperienza</li><li>La crescita</li></ol>
+          <h2 id="careerWelcomeTitle" tabindex="-1"></h2>
+          <div class="welcomeSpeech" aria-live="polite"><p id="careerWelcomeText"></p><p id="careerWelcomeDetail"></p></div>
+          <p class="welcomeTip" id="careerWelcomeTip"></p>
+          <div class="welcomeActions"><button id="careerWelcomePrev" type="button">Indietro</button><button id="careerWelcomeNext" type="button">Continua</button></div>
+          <button id="careerWelcomeCancel" type="button">Torna alle modalità</button>
+        </section>
       </div>
     </div>
     <div class="overlay" id="brief">
@@ -299,15 +322,16 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.4.0"></script>
-<script src="graphics-walls.js?v=1.4.0"></script>
-<script src="graphics-people.js?v=1.4.0"></script>
-<script src="career-progression.js?v=1.4.0"></script>
-<script src="career-save.js?v=1.4.0"></script>
-<script src="specialist-mode.js?v=1.4.0"></script>
-<script src="specialist-ui.js?v=1.4.0"></script>
-<script src="game-modes.js?v=1.4.0"></script>
-<script src="app-update.js?v=1.4.0"></script>
+<script src="graphics-interior.js?v=1.5.0"></script>
+<script src="graphics-walls.js?v=1.5.0"></script>
+<script src="graphics-people.js?v=1.5.0"></script>
+<script src="career-progression.js?v=1.5.0"></script>
+<script src="career-save.js?v=1.5.0"></script>
+<script src="specialist-mode.js?v=1.5.0"></script>
+<script src="specialist-ui.js?v=1.5.0"></script>
+<script src="game-modes.js?v=1.5.0"></script>
+<script src="career-welcome.js?v=1.5.0"></script>
+<script src="app-update.js?v=1.5.0"></script>
 <script>
 'use strict';
 
@@ -587,7 +611,8 @@ const TACTICS = {
 const TACTIC_ORDER = ['equilibrio', 'vendita', 'qualita', 'velocita'];
 const T = s => !s || TIER[s.tier].area === 'floor' ? TACTICS[game.tactic || 'equilibrio'] : TACTICS.equilibrio;
 const pushed = s => game.push && game.time < game.push.until && TIER[s.tier].area === game.push.area;
-const pace = s => (1.3 - 0.6 * s.stats.mot / 100) * (pushed(s) ? 0.8 : 1) * (s.role === 'specialist' ? T(s).pace : 1);                                         // motivazione → più veloce
+const pace = s => (1.3 - 0.6 * s.stats.mot / 100) * (pushed(s) ? 0.8 : 1) * (s.role === 'specialist' ? T(s).pace : 1) *
+  (s.isPlayer ? window.PLCareerProgression.learningTime(s.stats) : 1); // motivazione e pratica → più veloce; la promozione conserva la rapidità acquisita
 // al Genius Bar si sbaglia circa una riparazione su venti; meno con più competenza
 const errorChance = (s, c) => (s.role === 'genius' ? 0.045 * (1.3 - s.stats.comp / 100) : 0.1 * (1 - s.stats.comp / 100)) * (1 - 0.25 * F().op) * ddSupport(s, c); // competenza e DD Support → meno errori
 // DD Support: meno errori al Bar, molti meno sul tipo di riparazione scelto
@@ -2974,6 +2999,7 @@ function drawIntro(dt) {
   }
 }
 function showModes() {
+  window.PLCareerWelcome.close();
   modePicking = true;
   intro.on = true;
   intro.typed = INTRO_LINE.length;
@@ -2983,6 +3009,7 @@ function showModes() {
   window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
 }
 function closeModes() {
+  window.PLCareerWelcome.close();
   modePicking = false;
   intro.on = false;
   document.getElementById('intro').classList.remove('show');
@@ -3093,12 +3120,23 @@ function importCareer(snapshot) {
   return { ok: true };
 }
 
+function showCareerWelcome(newCareer = false) {
+  modePicking = true;
+  return window.PLCareerWelcome.open({ newCareer });
+}
+window.PLCareerWelcome.bind({
+  enter: () => {
+    if (careerCheckpoint && typeof window.confirm === 'function' &&
+        !window.confirm('Iniziare una nuova Carriera? Il giorno e la crescita salvati saranno sostituiti.')) return false;
+    return selectMode('career');
+  },
+});
 window.PLGameModes.bind({
   choose: mode => {
-    if (mode === 'career' && careerCheckpoint && typeof window.confirm === 'function' &&
-        !window.confirm('Iniziare una nuova Carriera? Il giorno e la crescita salvati saranno sostituiti.')) return;
-    selectMode(mode);
+    if (mode === 'career') showCareerWelcome(true);
+    else selectMode(mode);
   },
+  welcome: () => showCareerWelcome(),
   resume: resumeCareer,
   import: importCareer,
 });

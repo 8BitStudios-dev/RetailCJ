@@ -1,0 +1,29 @@
+.introMenu { display: flex; flex-direction: column; gap: 10px; }
+.introMenu[hidden], .careerWelcome[hidden] { display: none; }
+.careerWelcome { display: flex; flex-direction: column; gap: 14px; text-align: left; padding: 16px; border: 1px solid #638ab8; border-radius: 8px; background: #232b39; }
+.welcomeLead { display: flex; align-items: center; gap: 12px; }
+.welcomePortrait { width: 64px; height: 64px; flex: 0 0 64px; border: 1px solid #69788b; border-radius: 6px; background: #354357; }
+.welcomeLead strong { display: block; font-size: 15px; color: #e6efff; }
+.welcomeLead span { display: block; margin-top: 4px; font-size: 11px; color: #bac8dc; }
+.welcomeStep { margin: 0; font-size: 11px; color: #afcaff; }
+.welcomeSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0; list-style: none; }
+.welcomeSteps li { border-top: 3px solid #4d5b70; padding-top: 6px; font-size: 10px; color: #aebacb; }
+.welcomeSteps li.isCurrent { border-color: #93bcff; color: #e1ecff; }
+.careerWelcome h2 { margin: 0; font-size: clamp(20px, 4.5vw, 25px); line-height: 1.2; color: #fff; }
+.careerWelcome h2:focus { outline: none; }
+.welcomeSpeech { border-left: 3px solid #80a7e5; padding-left: 12px; }
+.welcomeSpeech p { margin: 0; font-size: 14px; line-height: 1.6; }
+.welcomeSpeech p + p { margin-top: 12px; color: #c7d4e8; }
+.welcomeTip { margin: 0; padding: 11px 12px; border: 1px solid #506584; border-radius: 5px; background: #2c3a50; color: #d7e7ff; font-size: 12px; line-height: 1.5; }
+.welcomeActions { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr); gap: 8px; }
+.introBox .welcomeActions button { min-height: 44px; padding: 8px 10px; font-size: 13px; }
+.introBox #careerWelcomeNext { background: #3564bf; border-color: #8cb5ff; }
+.introBox #careerWelcomeCancel { min-height: 36px; font-size: 11px; background: transparent; border-color: #52637b; color: #c3d1e5; }
+.careerWelcome button:focus-visible, .introBox #careerWelcomeRead:focus-visible { outline: 2px solid #b9d3ff; outline-offset: 2px; }
+.introBox #careerWelcomeRead { grid-column: 1 / -1; min-height: 36px; font-size: 11px; background: transparent; border-color: #52637b; }
+@media (max-width: 420px), (max-height: 560px) {
+  .careerWelcome { gap: 10px; padding: 12px; }
+  .welcomeSpeech p { font-size: 13px; line-height: 1.5; }
+  .welcomePortrait { width: 48px; height: 48px; flex-basis: 48px; }
+  .welcomeTip { font-size: 11px; padding: 9px; }
+}

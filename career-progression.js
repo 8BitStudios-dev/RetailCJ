@@ -34,5 +34,10 @@
     return true;
   }
 
-  root.PLCareerProgression = { roles, role, view, promote };
+  function learningTime(profile) {
+    const career = view(profile);
+    return 1.2 - 0.1 * (career.index + career.progress / career.max);
+  }
+
+  root.PLCareerProgression = { roles, role, view, promote, learningTime };
 })(window);
