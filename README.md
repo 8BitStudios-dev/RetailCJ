@@ -2,6 +2,12 @@
 
 PLGame — gioco di gestione retail.
 
+## Versione online
+
+[Gioca a RetailCJ](https://retailcj.muccaugo.chatgpt.site).
+
+Hosting con Sites.
+
 ## Avvio locale
 
 Dalla cartella della repository:
