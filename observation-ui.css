@@ -1,0 +1,84 @@
+.observationLab { border-color: #598ac6; min-width: 0; }
+.observationLab[hidden], .observationLab [hidden] { display: none !important; }
+.observationLab * { min-width: 0; }
+.observationHeader { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; }
+.observationHeader h2 { margin: 0; font-size: 15px; line-height: 1.35; }
+.observationState { border: 1px solid #58759c; padding: 2px 5px; border-radius: 3px; color: #bfd8ff; font-size: 9px; }
+.observationIntro { margin: 7px 0; font-size: 11px; line-height: 1.5; color: #c4cbd6; }
+.observationStamp { font-size: 9px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.observationMetrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.observationMetric { background: #1e2837; border: 1px solid #3e5574; border-radius: 4px; padding: 7px; display: flex; flex-direction: column; }
+.observationMetric strong { order: 1; display: block; font-size: 20px; line-height: 1.2; color: #d9e8ff; }
+.observationMetricLabel { order: 0; color: #d0d7e3; font-size: 10px; margin-bottom: 3px; }
+.observationMetricNote { order: 2; font-size: 9px; color: var(--muted); margin-top: 4px; }
+.observationTotals { margin: 8px 0; font-size: 9px; line-height: 1.6; color: #c4cbd6; }
+.observationTableWrap { width: 100%; }
+.observationTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+.observationTable caption { text-align: left; color: #b9cde8; font-size: 10px; margin-bottom: 5px; }
+.observationTable th { font-weight: 400; }
+.observationTable thead th { color: var(--muted); font-size: 8px; padding: 5px 2px; text-align: right; border-bottom: 1px solid #4b617c; }
+.observationTable th:first-child { width: 37%; text-align: left; }
+.observationTable tbody th, .observationTable td { padding: 5px 2px; border-bottom: 1px solid var(--line); line-height: 1.35; overflow-wrap: anywhere; }
+.observationTable td { text-align: right; font-variant-numeric: tabular-nums; }
+.observationFootnote { font-size: 9px; line-height: 1.5; color: var(--muted); margin: 7px 0; }
+.observationModelNote { border-top: 1px solid var(--line); padding-top: 8px; margin-bottom: 0; }
+.observationDetails { margin: 9px 0; font-size: 11px; border-top: 1px solid var(--line); padding-top: 4px; }
+.observationDetails > summary { color: #b5d0f7; min-height: 38px; font-size: 11px; display: list-item; padding: 9px 2px; line-height: 1.5; }
+.observationDetails[open] > summary { color: #e1ecff; }
+.observationConfiguration, .observationLive { margin: 6px 0; padding: 0 7px; border: 1px solid #425e85; border-radius: 4px; background: #202b3c; }
+.observationConfiguration > summary, .observationLive > summary { min-height: 34px; padding: 7px 2px; }
+.observationConfiguration[open], .observationLive[open] { padding-bottom: 8px; }
+.observationPhaseList, .observationCompareResults { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; margin: 8px 0; font-size: 10px; }
+.observationPhaseList dt, .observationCompareResults dt { color: #c7ced9; }
+.observationPhaseList dd, .observationCompareResults dd { margin: 0; text-align: right; color: #d9e8ff; }
+.observationSecondaryMetrics { white-space: pre-line; font-size: 10px; line-height: 1.7; margin: 8px 0; color: var(--muted); }
+.observationComparison { background: #202b3c; border: 1px solid #425e85; border-radius: 4px; padding: 8px; margin-top: 10px; }
+.observationComparison h3 { font-size: 10px; color: #c5dcff; margin: 0 0 5px; letter-spacing: .5px; }
+.observationCompareResults dd.isBetter { color: #90d99b; }
+.observationCompareResults dd.isWorse { color: #ffab9b; }
+.observationButtonRow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.observationButtonRow button { flex: 1 1 110px; }
+.observationLab button { font-size: 10px; min-height: 38px; line-height: 1.4; padding: 6px; }
+.observationLab button:focus-visible, .observationLab input:focus-visible, .observationLab select:focus-visible, .observationLab summary:focus-visible { outline: 2px solid #bdd6ff; outline-offset: 3px; }
+.observationLab button:disabled { cursor: default; }
+.observationForm { display: flex; flex-direction: column; gap: 8px; margin-top: 5px; }
+.observationFieldset { margin: 0; padding: 8px; border: 1px solid #495769; border-radius: 4px; }
+.observationFieldset legend { color: #c5dcff; font-size: 10px; padding: 0 4px; }
+.observationField { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; font-size: 10px; }
+.observationField:last-child { margin-bottom: 0; }
+.observationFieldLabel { display: flex; justify-content: space-between; align-items: baseline; gap: 7px; color: #d5dce7; line-height: 1.4; }
+.observationFieldLabel output { color: #b9d7ff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.observationField input:not([type="range"]), .observationField select { width: 100%; min-height: 36px; color: var(--text); background: #1b2330; border: 1px solid #536784; border-radius: 4px; padding: 5px 7px; font: inherit; }
+.observationField input[type="range"] { width: 100%; min-height: 25px; margin: 0; accent-color: #86b7ff; }
+.observationStaffGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 9px; }
+.observationStaffGrid .observationField { margin-bottom: 4px; }
+.observationStaffGrid .observationFieldLabel { font-size: 9px; min-height: 25px; }
+.observationHint { color: var(--muted); font-size: 9px; line-height: 1.55; margin: 5px 0; overflow-wrap: anywhere; }
+.observationDraftState { font-size: 10px; line-height: 1.45; color: #c3ccda; margin: 0; }
+.observationDraftState.isChanged { color: #ffd59b; }
+.observationApply { width: 100%; }
+.observationAdvanced { margin: 0; padding: 0 3px; }
+.observationArrivalButtons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin: 8px 0; }
+.observationArrivalButtons button { text-align: left; }
+.observationStaffAddition { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: end; margin: 10px 0 8px; }
+.observationStaffAddition .observationField { margin: 0; }
+.observationSupport { width: 100%; }
+.observationCapacity { font-size: 9px; line-height: 1.5; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin: 8px 0; }
+.observationCapacity.isWarning { color: #ffd29a; }
+.observationNotice { font-size: 10px; line-height: 1.5; color: #bdd6ff; background: #1f2d43; border: 1px solid #4d6f9d; border-radius: 4px; padding: 7px; margin: 7px 0; }
+@media (min-width: 901px) {
+  .app:has(.observationLab:not([hidden])) .stage { position: sticky; top: 16px; align-self: start; }
+}
+@media (max-width: 760px) {
+  .observationHeader h2 { font-size: 16px; }
+  .observationIntro { font-size: 12px; }
+  .observationLab button { min-height: 44px; font-size: 11px; }
+  .observationDetails > summary { min-height: 44px; font-size: 12px; }
+  .observationField input:not([type="range"]), .observationField select { min-height: 44px; font-size: 12px; }
+  .observationField input[type="range"] { min-height: 36px; }
+  .observationField, .observationFieldset legend { font-size: 11px; }
+  .observationHint, .observationFootnote, .observationCapacity { font-size: 10px; }
+  .observationTable { font-size: 10px; }
+  .observationTable thead th { font-size: 9px; }
+  .observationStaffGrid .observationFieldLabel { font-size: 10px; }
+}

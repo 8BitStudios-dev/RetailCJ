@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.7.0">
+<meta name="application-version" content="1.8.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>PLGame</title>
+<title>RetailCJ — Laboratorio del floor</title>
 <style>
   :root {
     color-scheme: dark;
@@ -160,10 +160,11 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.7.0">
-<link rel="stylesheet" href="game-modes.css?v=1.7.0">
-<link rel="stylesheet" href="app-update.css?v=1.7.0">
-<link rel="stylesheet" href="career-welcome.css?v=1.7.0">
+<link rel="stylesheet" href="specialist-ui.css?v=1.8.0">
+<link rel="stylesheet" href="game-modes.css?v=1.8.0">
+<link rel="stylesheet" href="app-update.css?v=1.8.0">
+<link rel="stylesheet" href="career-welcome.css?v=1.8.0">
+<link rel="stylesheet" href="observation-ui.css?v=1.8.0">
 </head>
 <body>
 <div class="app">
@@ -323,16 +324,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.7.0"></script>
-<script src="graphics-walls.js?v=1.7.0"></script>
-<script src="graphics-people.js?v=1.7.0"></script>
-<script src="career-progression.js?v=1.7.0"></script>
-<script src="career-save.js?v=1.7.0"></script>
-<script src="specialist-mode.js?v=1.7.0"></script>
-<script src="specialist-ui.js?v=1.7.0"></script>
-<script src="game-modes.js?v=1.7.0"></script>
-<script src="career-welcome.js?v=1.7.0"></script>
-<script src="app-update.js?v=1.7.0"></script>
+<script src="graphics-interior.js?v=1.8.0"></script>
+<script src="graphics-walls.js?v=1.8.0"></script>
+<script src="graphics-people.js?v=1.8.0"></script>
+<script src="career-progression.js?v=1.8.0"></script>
+<script src="career-save.js?v=1.8.0"></script>
+<script src="specialist-mode.js?v=1.8.0"></script>
+<script src="specialist-ui.js?v=1.8.0"></script>
+<script src="game-modes.js?v=1.8.0"></script>
+<script src="career-welcome.js?v=1.8.0"></script>
+<script src="app-update.js?v=1.8.0"></script>
+<script src="observation-lab.js?v=1.8.0"></script>
+<script src="observation-engine.js?v=1.8.0"></script>
+<script src="observation-ui.js?v=1.8.0"></script>
 <script>
 'use strict';
 
@@ -539,6 +543,7 @@ let modePicking = false;
 let careerStarted = false;
 let careerPromotionNotice = '';
 let careerCheckpoint = window.PLCareerSave.load();
+let observation = null;
 
 // La squadra: 43 persone, tutte full time, 5 giorni su 7. Ogni livello ha un tetto di competenza,
 // una resistenza allo stress e un vantaggio proprio (vendita, riparazioni, conversione dal Today at Apple).
@@ -656,6 +661,8 @@ const rainy = () => game.weather === 'pioggia';
 function pickWeather() { const r = Math.random(); return r < 0.35 ? 'sole' : r < 0.68 ? 'nuvoloso' : 'pioggia'; }
 
 function newDay(dayOfMonth, opts = {}) {
+  const labConfig = observation && observation.prepare(dayOfMonth, opts);
+  if (labConfig) opts = {...opts, seed: labConfig.seed, weather: labConfig.weather};
   careerPromotionNotice = '';
   const date = new Date(2027, 0, dayOfMonth);
   const weekend = date.getDay() === 0 || date.getDay() === 6;
@@ -664,7 +671,7 @@ function newDay(dayOfMonth, opts = {}) {
   BAR.forEach(s => s.taken = null);
   QUEUE.forEach(s => s.taken = null);
   game = {
-    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours,
+    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours, observationConfig: labConfig,
     weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
     time: OPEN - 2, speed: game ? game.speed : 1,
     customers: [], staff: [], nextId: 1, lineIn: [], lineGB: [], lineEx: [],
@@ -682,7 +689,7 @@ function newDay(dayOfMonth, opts = {}) {
   game.focus = { op: 0, sales: 0, cel: 0 };
   game.stats.setupsStarted = 0; game.stats.unfinished = 0;
   game.orders = [];
-  game.dd = null; game.tactic = 'equilibrio'; game.planning = false; game.checkpoint = false; game.history = [];
+  game.dd = null; game.tactic = labConfig ? labConfig.tactic : 'equilibrio'; game.planning = false; game.checkpoint = false; game.history = [];
   game.arrivals = buildArrivals(opts.seed !== undefined ? opts.seed : Math.floor(nativeRandom() * 1e9), opts);
   game.briefing = true;
   document.getElementById('debrief').classList.remove('show');
@@ -744,6 +751,7 @@ const slotProps = (rota, i) => {
 };
 
 function makeStaff() {
+  if (game.observationConfig) { observation.makeStaff(); return; }
   const dow = game.date.getDay(), names = Object.keys(TEAM).filter(name => name !== 'Tu');
   const off = n => TEAM[n].off.includes(dow);
   game.offToday = names.filter(off).length;
@@ -885,7 +893,7 @@ function ddPreview(d) {
   const warn = t.area !== 'all' && d.who !== 'tutti' && d.who !== t.area ? ' Attenzione: chi partecipa non è la squadra che ne beneficia di più.' : '';
   return effects + (streak > 1 ? ` Serie di ${streak} giorni: la competenza cresce di più.` : '') + warn;
 }
-const avgTeam = k => Math.round(game.staff.reduce((a, x) => a + x.stats[k], 0) / game.staff.length);
+const avgTeam = k => game.staff.length ? Math.round(game.staff.reduce((a, x) => a + x.stats[k], 0) / game.staff.length) : 0;
 // ─────────────────────────────────────────────────────────────
 // Livelli: ogni giorno la leadership detta un focus, e tocca a te trovare la strategia giusta
 // ─────────────────────────────────────────────────────────────
@@ -1045,6 +1053,7 @@ function strategyHtml(phase) {
   return parts.join('');
 }
 function showBrief() {
+  if (game.observationConfig) { game.briefing = false; document.getElementById('brief').classList.remove('show'); return; }
   const w = WEATHER[game.weather], L = game.level;
   document.getElementById('brTitle').textContent = SPECIALIST_ON ? 'Carriera · ' + window.PLCareerProgression.view(TEAM.Tu).role : 'Osservazione · Apertura';
   document.getElementById('brDate').textContent = `${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio · ${w.icon} ${w.name}${game.date.getDay() === 6 ? ' · sabato, il giorno più pieno' : game.weekend ? ' · domenica, tanta gente' : ''}`;
@@ -1265,6 +1274,7 @@ function log(msg) {
 // ─────────────────────────────────────────────────────────────
 function goTo(e, target) { e.path = findPath(e, target); e.dest = target; }
 function moveAlong(e, dt) {
+  if (e.role === 'ops' && game.observationConfig) dt /= game.observationConfig.delivery;
   let budget = WALK * (e.role === 'ops' ? 3.3 : e.isStaff ? 1.15 : 1) * dt;
   let moved = false;
   while (budget > 0 && e.path.length) {
@@ -1317,7 +1327,7 @@ function customerProfile() {
   return { familiarity: level(), hurry: level(), mood: r < 0.8 ? rand(72, 88) : r < 0.95 ? rand(45, 60) : rand(20, 35) };
 }
 const profileTime = c => [1.2, 1, 0.85][c.familiarity ?? 1];
-const patienceRate = c => [0.8, 1, 1.8][c.hurry ?? 1];
+const patienceRate = c => [0.8, 1, 1.8][c.hurry ?? 1] * (game.observationConfig ? 1 / game.observationConfig.patience : 1);
 function spawnCustomer(kind, extra = {}) {
   const c = {
     id: game.nextId++, kind, isStaff: false,
@@ -1335,6 +1345,7 @@ function spawnCustomer(kind, extra = {}) {
   if (kind === 'genius' && c.repair === undefined) { const r = Math.random(); c.repair = r < 0.5 ? 0 : r < 0.85 ? 1 : 2; }
   game.customers.push(c);
   game.stats.entered++;
+  if (game.observationLedger) window.PLObservation.recordEnter(game.observationLedger, c, game.time);
   { const a = agendaOf(c); if (a) a.status = 'arrivato'; }
   // chi ha un appuntamento sa dove andare: va dritto al Point del Genius Bar
   if (c.appt !== undefined) { if (kind === 'buy') game.stats.buyers++; game.lineGB.push(c); return c; }
@@ -1392,8 +1403,8 @@ function proceed(c) {
     c.state = 'inLine'; c.lineIdx = -1; game.lineGB.push(c);
   } else if (c.kind === 'acc') {
     // alla parete accessori: chi sa già cosa vuole prende e va all'Express, gli altri chiedono
-    c.side = Math.random() < 0.5 ? 'L' : 'R';
-    c.quick = Math.random() < 0.6;
+    c.side = c.side || (Math.random() < 0.5 ? 'L' : 'R');
+    c.quick = c.quick === undefined ? Math.random() < 0.6 : c.quick;
     c.state = 'toWall';
     goTo(c, { x: WALL_SPOT[c.side], y: c.side === 'L' ? rand(160, 1650) : rand(400, 1650) });
   } else {
@@ -1443,6 +1454,7 @@ function apptExtra(t, r, walkin, base = {}) {
 }
 // prima dell'apertura: tanti appuntamenti quanti, più o meno, i clienti che arriveranno senza
 function buildAgenda(seed) {
+  if (game.observationConfig) { observation.agenda(); return; }
   const r = mulberry(seed);
   game.slots = []; game.agenda = [];
   const walkins = game.arrivals.filter(a => a.kind === 'genius').length;
@@ -1467,7 +1479,7 @@ function checkIn(point, c) {
     const t = bookSlot(game.time + 20);
     point.state = 'idle'; point.customer = null;
     if (t === null) { game.stats.walkinLater++; log(`${point.name}: agenda piena, il cliente tornerà un altro giorno`); leave(c, 'later'); return; }
-    const r = Math.random, extra = apptExtra(t, r, true, { repair: c.repair, look: c.look, exp: c.exp + 2, rude: c.rude });
+    const r = Math.random, extra = apptExtra(t, r, true, { repair: c.repair, look: c.look, exp: c.exp + 2, rude: c.rude, ...(game.observationLedger ? {journeyId: c.journeyId, labChannel: c.labChannel, familiarity: c.familiarity, hurry: c.hurry, mood: c.mood} : {}) });
     if (r() >= 0.05) game.arrivals.push({ t: Math.max(game.time + 5, apptArrival(t, r)), kind: 'genius', extra });   // qualcuno non torna
     game.arrivals.sort((a, b) => a.t - b.t);
     game.agenda.sort((a, b) => a.t - b.t);
@@ -1609,6 +1621,7 @@ function leave(c, outcome) {
     careerLeadSupport(playerMode.player(), c, 'visit');
   }
   survey(c);
+  if (game.observationLedger) window.PLObservation.recordLeave(game.observationLedger, c, outcome, game.time);
   if (c.staff) { if (c.staff.customer === c) c.staff.customer = null; c.staff = null; }
   c.state = 'leaving';
   goTo(c, { x: DOOR.x + rand(-30, 30), y: DOOR.y - 20 });
@@ -1620,6 +1633,12 @@ function updateCustomer(c, dt) {
   c.lastProfileExp = c.exp;
   const arrived = moveAlong(c, dt);
   const cost = WAIT_COST[c.state];
+  if (game.observationLedger) {
+    const keyroleWait = c.staff && (c.staff.expertHelp || c.staff.helpRequester);
+    const waiting = cost && !(c.state === 'atBar' && c.staff && c.staff.state === 'repair');
+    if (keyroleWait || waiting) window.PLObservation.recordWait(game.observationLedger, c,
+      keyroleWait ? 'keyrole' : game.lineEx.includes(c) ? 'lineEx' : game.lineGB.includes(c) ? 'lineGB' : c.state, dt);
+  }
   if (cost && !(c.state === 'atBar' && c.staff && c.staff.state === 'repair')) { c.exp -= cost * dt * patienceRate(c); c.waited += dt; }
   if (c.staff && (c.staff.expertHelp || c.staff.helpRequester)) {
     c.exp -= 0.35 * dt * patienceRate(c); c.waited += dt;
@@ -1838,7 +1857,10 @@ function dispatchOps() {
   const queued = game.orders.filter(o => !o.ops);
   if (!queued.length) return;
   // se oggi in Operations non c'è più nessuno, il prodotto lo prende chi vende
-  if (!opsOn().length) { queued.forEach(delivered); return; }
+  if (!opsOn().length) {
+    if (!game.observationConfig) queued.forEach(delivered);
+    return; // In the laboratory a missing Operations team leaves a real backlog.
+  }
   for (const o of queued) {
     if (o.ops) continue;                                     // già preso in un giro con altri ordini
     // chi è ancora in backstage per un ordine dello stesso minuto prende anche questo
@@ -2131,7 +2153,7 @@ function updateStaff(s, dt) {
         // in magazzino l'iPhone è a portata di mano; iPad, Watch e Mac richiedono di più; ogni pezzo in più aggiunge poco
         const pick1 = o => rand(...(o.items.includes('product') ? (PICK_TIME[o.c.product] || PICK_TIME.acc) : PICK_TIME.acc));
         const items = s.batch.reduce((a, o) => a + o.items.length, 0);
-        s.hidden = true; s.state = 'picking'; s.t = (Math.max(...s.batch.map(pick1)) + 0.4 * (items - 1)) * pace(s);
+        s.hidden = true; s.state = 'picking'; s.t = (Math.max(...s.batch.map(pick1)) + 0.4 * (items - 1)) * pace(s) * (game.observationConfig ? game.observationConfig.delivery : 1);
       }
       break;
     case 'picking':
@@ -2573,6 +2595,8 @@ function step(dt) {
     return;
   }
   dt = Math.min(Math.max(0, Number(dt) || 0), stop - game.time);
+  if (game.observationConfig) dt = observation.limit(dt);
+  if (dt <= 0) return;
   const before = game.time;
   game.time += dt;
   if (before < OPEN && game.time >= OPEN) log(`Porte aperte: entrano ${spawnArrivals()} clienti che aspettavano fuori`);
@@ -2604,6 +2628,7 @@ function step(dt) {
   game.staff = game.staff.filter(x => !x.gone);
   [...game.customers, ...game.staff].forEach(e => { if (e.bubble && game.time > e.bubble.until) e.bubble = null; });
 
+  if (game.observationConfig) observation.afterStep();
   if (game.time >= stop) {
     game.time = stop;
     if (playerMode) finishPlayerShift(); else closeStore();
@@ -2637,6 +2662,11 @@ function closeStore() {
     if (!STRATEGY_ON || SPECIALIST_ON) { st.unfinished++; leave(c, 'unfinished'); }
     else leave(c, c.bought || c.tradeOnly ? 'bought' : repairing ? 'fixed' : c.kind === 'look' ? 'looked' : 'browsed');
   }
+  if (game.observationLedger) {
+    const pending = Object.values(game.observationLedger.journeys).filter(j => !j.outcome).length;
+    st.unfinished += pending;
+    window.PLObservation.finishLedger(game.observationLedger, game.time);
+  }
   for (const x of game.staff) { x.customer = null; x.order = null; x.batch = []; }
   game.orders = []; game.customers = [];
   log('Chiusura alle 20:00');
@@ -2645,6 +2675,7 @@ function closeStore() {
 
 function teamDelta() {
   const avg = (k, from) => game.staff.reduce((a, x) => a + (from ? x.start : x.stats)[k], 0) / game.staff.length;
+  if (!game.staff.length) return [['Team', 'Nessuna persona in turno']];
   const d = k => { const a = avg(k, true), b = avg(k, false), v = Math.round(b - a); return `${Math.round(b)} <small>(${v >= 0 ? '+' : ''}${v})</small>`; };
   return [['Team · motivazione', d('mot')], ['Team · stress', d('stress')], ['Team · competenza', d('comp')]];
 }
@@ -2903,6 +2934,7 @@ const ROLE_LABEL = { point: 'Point', express: 'Cassa Express', accessori: 'Speci
 
 let lastPanel = 0;
 function updatePanel() {
+  if (observation) window.PLObservationUI.render(observation.view);
   const personalView = playerMode ? playerMode.view() : { enabled: false };
   if (careerPromotionNotice && personalView.enabled) personalView.message = careerPromotionNotice;
   window.PLSpecialistUI.render(personalView);
@@ -3042,6 +3074,7 @@ canvas.addEventListener('click', ev => {
 document.getElementById('speed').addEventListener('click', ev => {
   const b = ev.target.closest('button'); if (!b) return;
   game.speed = +b.dataset.s;
+  if (game.speed > 0 && observation) observation.resume();
   document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b));
 });
 document.getElementById('dbRetry').addEventListener('click', () => { document.getElementById('debrief').classList.remove('show'); startLevel(game.levelIndex); });
@@ -3145,7 +3178,7 @@ function advanceDay() {
   if (!game.over) return false;
   document.getElementById('debrief').classList.remove('show');
   const day = playerMode ? restToNextShift(game.day, game.focus) : game.day % 31 + 1;
-  if (!playerMode) overnight(game.focus);
+  if (!playerMode && !game.observationConfig) overnight(game.focus);
   newDay(day);
   updatePanel();
   return true;
@@ -3160,6 +3193,7 @@ function restToNextShift(day, focus) {
 
 function beginMode(mode, day, opts = {}) {
   if (!['observation', 'career'].includes(mode)) return false;
+  if (observation) { if (mode === 'observation') observation.enter(); else observation.exit(); }
   chosenMode = mode;
   careerPromotionNotice = '';
   SPECIALIST_ON = mode === 'career';
@@ -3171,9 +3205,7 @@ function beginMode(mode, day, opts = {}) {
   for (const id of ['levels', 'check', 'moment', 'plan']) document.getElementById(id).classList.remove('show');
   seedRandom(null);
   newDay(day, opts);
-  game.speed = 1;
-  acc = 0;
-  document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', b.dataset.s === '1'));
+  resetSimulationClock(1);
   updatePanel();
   return true;
 }
@@ -3234,13 +3266,22 @@ window.PLGameModes.bind({
   import: importCareer,
 });
 window.PLAppUpdate.bind({ hasActiveShift: () => Boolean(game && !game.briefing && !game.over) });
+function resetSimulationClock(speed) {
+  game.speed = speed; acc = 0;
+  document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', Number(b.dataset.s) === speed));
+}
+observation = window.PLObservationEngine.create({getGame: () => game, getMode: () => chosenMode, isModePicking: () => modePicking,
+  TEAM, TIER, ROSTER, NEEDS, SKIN, HAIR, STAFF_SHIRT, BACK_DOOR, CREATIVE_HOMES, LEAD_HOMES, OPEN, LAST_ENTRY, LAST_APPT,
+  seedRandom, rand, pick, buildFloorRota, buildBarRota, slotProps, newDay, startDay, updatePanel, log, bump, resetClock: resetSimulationClock});
+window.PLObservationUI.bind(observation);
+if (chosenMode === 'observation') observation.enter();
 newDay(7);
 if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').classList.remove('show'); }
 updatePanel();
 requestAnimationFrame(frame);
 // per i test: avanza la simulazione senza aspettare
 window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, promoteCareer, refreshApp: window.PLAppUpdate.refresh, showModes, closeModes,
-  get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
+  observation, get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 </script>
 </body>
 </html>

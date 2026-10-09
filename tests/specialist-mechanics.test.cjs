@@ -619,11 +619,11 @@ test('switching both modes starts a fresh day and never duplicates the player or
   assert.equal(env.mode(), null);
   assert.equal(env.game().day, 7);
   assert.equal(env.game().speed, 1);
-  assert.equal(env.game().briefing, true);
+  assert.equal(env.game().briefing, false, 'Observation opens the laboratory directly');
   assert.equal(env.game().staff.some(person => person.isPlayer || person.name === 'Tu'), false);
   assert.equal(env.game().customers.length, 0);
   assert.equal(env.get('playerPanel').hidden, true);
-  assert.match(env.get('brTeam').innerHTML, new RegExp('su ' + npcRosterSize + '(?:\\D|$)'));
+  assert.equal(env.game().staff.length, Object.values(env.context.PLObservation.defaults.staff).reduce((sum, count) => sum + count, 0));
   env.evaluate('overnight(game.focus); newDay(game.day + 1); updatePanel()');
   assert.equal(env.evaluate('window.__sim.mode'), 'observation');
   assert.equal(env.evaluate('JSON.stringify(TEAM.Tu)'), personalStats, 'Observation nights do not alter the inactive player profile');

@@ -5,7 +5,7 @@
     {
       id: 'observation',
       title: 'Osservazione',
-      description: 'Il floor lavora da solo. Osserva clienti, colleghi e risultati.'
+      description: 'Configura clienti, personale e condizioni. Confronta come cambia la CJ sul floor.'
     },
     {
       id: 'career',
