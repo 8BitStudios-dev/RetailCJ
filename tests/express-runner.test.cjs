@@ -69,6 +69,28 @@ function completeDeliveries(env, count) {
 
 function report(env) { return plain(env.context.__sim.observation.view.report); }
 
+function walkToExit(env, name) {
+  const customer = env.context[name];
+  assert.equal(customer.state, 'leaving');
+  assert.notEqual(customer.gone, true, 'Starting a new exit path must not remove a customer from the floor');
+  assert.ok(env.game().customers.includes(customer));
+  assert.ok(customer.path.length > 0, 'The customer still has a real journey to the door');
+  const start = {x: customer.x, y: customer.y};
+  const exit = plain(customer.dest);
+  env.evaluate(`updateCustomer(${name}, 0.05)`);
+  assert.notEqual(customer.gone, true, 'The first walking tick must keep the customer visible');
+  assert.notDeepEqual({x: customer.x, y: customer.y}, start, 'The customer walks away from the Express or waiting position');
+  let ticks = 1;
+  while (!customer.gone && ticks++ < 1600) env.evaluate(`updateCustomer(${name}, 0.05)`);
+  assert.ok(ticks < 1600, 'The real path must eventually reach the doorway');
+  assert.ok(ticks > 1, 'An exit from the floor takes multiple walking ticks');
+  assert.equal(customer.gone, true);
+  assert.equal(customer.path.length, 0);
+  assert.deepEqual({x: customer.x, y: customer.y}, exit, 'Removal happens at the actual exit destination');
+  env.evaluate('step(0.05)');
+  assert.equal(env.game().customers.includes(customer), false, 'The following frame removes only the arrived customer');
+}
+
 test('runner stock scenarios are bounded, deterministic and independent of staff and other customer profiles', () => {
   assert.equal(observation.defaults.expressRunnerRate, 0.25);
   assert.equal(observation.normalizeConfig({expressRunnerRate: -2}).expressRunnerRate, 0);
@@ -102,6 +124,51 @@ test('a stocked accessory keeps immediate Express checkout without requesting a 
   assert.equal(env.game().orders.length, 0);
   assert.equal(env.context.cashier.customer, null);
   assert.equal(report(env).metrics.completed, 1);
+});
+
+test('a completed Express checkout stays visible and walks to the door in observation and career', () => {
+  for (const career of [false, true]) {
+    const env = fixture({career});
+    const customer = startExpress(env, 'stocked', false);
+    finishExpress(env, 'stocked');
+    assert.equal(customer.outcome, 'bought');
+    assert.equal(env.game().stats.express, 1);
+    walkToExit(env, 'stocked');
+    assert.equal(env.game().stats.express, 1, 'Walking out cannot count the checkout again');
+  }
+});
+
+test('an Express customer stays on the floor while waiting for a runner and walks out after delivery', () => {
+  const env = fixture();
+  const customer = startExpress(env, 'waiting', true);
+  finishExpress(env, 'waiting');
+  assert.equal(customer.state, 'waitDelivery');
+  assert.notEqual(customer.gone, true);
+  const spot = customer.slot;
+  env.advance(3, 0.05);
+  assert.ok(env.game().customers.includes(customer));
+  assert.notEqual(customer.gone, true);
+  assert.deepEqual({x: customer.x, y: customer.y}, {x: spot.x, y: spot.y});
+  assert.equal(customer.outcome, undefined);
+  reinforce(env);
+  assert.equal(completeDeliveries(env, 1).delivered, 1);
+  assert.equal(customer.outcome, 'bought');
+  assert.equal(spot.taken, null);
+  walkToExit(env, 'waiting');
+  assert.equal(env.game().stats.expressRunnerDelivered, 1);
+});
+
+test('a timeout during a stationary waiting tick starts a visible exit instead of removing the customer', () => {
+  const env = fixture();
+  env.evaluate(`window.impatient = spawnCustomer('buy', {product: 'iphone', setup: null,
+    tradeIn: false, finance: false, familiarity: 0, hurry: 0, mood: 90});
+    game.lineIn = game.lineIn.filter(customer => customer !== impatient);
+    impatient.x = EXPRESS.talk.x; impatient.y = EXPRESS.talk.y;
+    impatient.path = []; impatient.state = 'waiting'; impatient.wait = 0; impatient.patience = 0.001;
+    updateCustomer(impatient, 0.05);`);
+  assert.equal(env.context.impatient.outcome, 'lost');
+  walkToExit(env, 'impatient');
+  assert.equal(env.game().stats.lost, 1);
 });
 
 test('a missing accessory frees the cashier for the next checkout and remains an open delivery journey', () => {

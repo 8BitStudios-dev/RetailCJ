@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.8.2">
+<meta name="application-version" content="1.8.3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -160,11 +160,11 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.8.2">
-<link rel="stylesheet" href="game-modes.css?v=1.8.2">
-<link rel="stylesheet" href="app-update.css?v=1.8.2">
-<link rel="stylesheet" href="career-welcome.css?v=1.8.2">
-<link rel="stylesheet" href="observation-ui.css?v=1.8.2">
+<link rel="stylesheet" href="specialist-ui.css?v=1.8.3">
+<link rel="stylesheet" href="game-modes.css?v=1.8.3">
+<link rel="stylesheet" href="app-update.css?v=1.8.3">
+<link rel="stylesheet" href="career-welcome.css?v=1.8.3">
+<link rel="stylesheet" href="observation-ui.css?v=1.8.3">
 </head>
 <body>
 <div class="app">
@@ -324,19 +324,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.8.2"></script>
-<script src="graphics-walls.js?v=1.8.2"></script>
-<script src="graphics-people.js?v=1.8.2"></script>
-<script src="career-progression.js?v=1.8.2"></script>
-<script src="career-save.js?v=1.8.2"></script>
-<script src="specialist-mode.js?v=1.8.2"></script>
-<script src="specialist-ui.js?v=1.8.2"></script>
-<script src="game-modes.js?v=1.8.2"></script>
-<script src="career-welcome.js?v=1.8.2"></script>
-<script src="app-update.js?v=1.8.2"></script>
-<script src="observation-lab.js?v=1.8.2"></script>
-<script src="observation-engine.js?v=1.8.2"></script>
-<script src="observation-ui.js?v=1.8.2"></script>
+<script src="graphics-interior.js?v=1.8.3"></script>
+<script src="graphics-walls.js?v=1.8.3"></script>
+<script src="graphics-people.js?v=1.8.3"></script>
+<script src="career-progression.js?v=1.8.3"></script>
+<script src="career-save.js?v=1.8.3"></script>
+<script src="specialist-mode.js?v=1.8.3"></script>
+<script src="specialist-ui.js?v=1.8.3"></script>
+<script src="game-modes.js?v=1.8.3"></script>
+<script src="career-welcome.js?v=1.8.3"></script>
+<script src="app-update.js?v=1.8.3"></script>
+<script src="observation-lab.js?v=1.8.3"></script>
+<script src="observation-engine.js?v=1.8.3"></script>
+<script src="observation-ui.js?v=1.8.3"></script>
 <script>
 'use strict';
 
@@ -1641,6 +1641,7 @@ function leave(c, outcome) {
 
 const WAIT_COST = { waitDelivery: 0.6, inLine: 0.6, waiting: 0.5, waitWall: 1.5, queued: 0.35, atBar: 0.6 };
 function updateCustomer(c, dt) {
+  const wasLeaving = c.state === 'leaving';
   if (c.lastProfileExp !== undefined) c.mood = clamp(c.mood + (c.exp - c.lastProfileExp) * 0.6);
   c.lastProfileExp = c.exp;
   const arrived = moveAlong(c, dt);
@@ -1764,7 +1765,8 @@ function updateCustomer(c, dt) {
       if (c.t <= 0 && !game.sessions.some(z => z.state === 'live')) leave(c, 'session');
       break;
   }
-  if (c.state === 'leaving' && arrived) c.gone = true;
+  // An arrival at the counter or table cannot finish a newly assigned exit path.
+  if (wasLeaving && c.state === 'leaving' && arrived) c.gone = true;
 }
 
 // ─────────────────────────────────────────────────────────────
