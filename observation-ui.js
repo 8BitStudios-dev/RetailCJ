@@ -17,7 +17,7 @@
     demand: { sales: 1, accessories: 1, express: 1, appointments: 1, walkins: 1, browse: 1 },
     staff: { S: 8, E: 3, P: 2, TS: 6, TE: 3, G: 1, C: 1, CP: 1, OP: 3, L: 2 },
     formation: 'accoglienza', tactic: 'equilibrio', skill: 50, motivation: 70,
-    stress: 20, delivery: 1, complexity: 0.25, patience: 1, noShow: 0.1, pattern: 'steady'
+    stress: 20, delivery: 1, complexity: 0.25, patience: 1, noShow: 0.1, expressRunnerRate: 0.25, pattern: 'steady'
   };
   let actions = {};
   let refs = null;
@@ -229,6 +229,7 @@
     fields.push(input(advanced, 'weather', 'Meteo', { choices: [['sole', 'Sole'], ['nuvoloso', 'Nuvoloso'], ['pioggia', 'Pioggia']] }));
     fields.push(input(advanced, 'pattern', 'Distribuzione degli arrivi', { choices: [['steady', 'Durante la giornata'], ['afternoon', 'Picco pomeridiano']] }));
     fields.push(input(advanced, 'delivery', 'Tempo di consegna', { type: 'range', min: 0.5, max: 3, step: 0.25, format: value => number(value, 2) + '×', hint: 'Un valore alto mette più pressione su Operations.' }));
+    fields.push(input(advanced, 'expressRunnerRate', 'Accessori Express dal backstage', { type: 'range', min: 0, max: 1, step: 0.05, format: value => number(value * 100) + '%', hint: 'Il cliente aspetta il runner di Operations; il collega Express può servire il prossimo cliente.' }));
     fields.push(input(advanced, 'complexity', 'Esigenze e riparazioni complesse', { type: 'range', min: 0, max: 1, step: 0.05, format: value => number(value * 100) + '%' }));
     fields.push(input(advanced, 'patience', 'Pazienza dei clienti', { type: 'range', min: 0.5, max: 2, step: 0.25, format: value => number(value, 2) + '×' }));
     fields.push(input(advanced, 'noShow', 'Appuntamenti non presentati', { type: 'range', min: 0, max: 1, step: 0.05, format: value => number(value * 100) + '%' }));

@@ -70,13 +70,13 @@ Ruolo e competenza sono inclusi nei salvataggi e nei backup versione 2. I salvat
 
 ## Versione e aggiornamento
 
-La versione corrente è **1.8.1**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
+La versione corrente è **1.8.2**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
 
 La versione è dichiarata nella meta `application-version` di `index.html` e nei parametri `v` dei file JavaScript e CSS. A ogni rilascio aggiornare entrambi: il ricaricamento usa un URL nuovo e i file della nuova versione non riutilizzano la copia precedente nella cache.
 
 ## Laboratorio Osservazione
 
-La versione 1.8.1 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
+La versione 1.8.2 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
 
 Il personale del turno è configurabile per tutti i dieci ruoli, fino a 80 persone complessive. La copertura include Point ingresso, Point Support ed Express; un solo tecnico al Bar copre il Point e non aumenta la capacità di riparazione. Si possono cambiare disposizione, priorità, competenza iniziale, motivazione, stress, meteo, picco pomeridiano, complessità delle visite, pazienza, mancate presentazioni e tempi Operations. Con zero Operations gli ordini restano in attesa.
 
@@ -85,3 +85,9 @@ Cinque scenari pronti aiutano a esplorare giornate normali, picchi vendita, pres
 Il report distingue persone uniche, percorsi conclusi, abbandoni, reindirizzati, aperti e incompleti. Un walk-in che torna all’appuntamento rimane un solo percorso. L’attesa complessiva è la media delle attese dei percorsi terminati; il dettaglio per fase comprende anche le code in corso. Esperienza media, conversione, errori, consegne e condizioni della squadra completano il report. Il NPS usa soltanto il campione di questionari dopo acquisti o riparazioni concluse, con il numero di risposte visibile. Alla chiusura nessun percorso incompleto viene trasformato in vendita o riparazione riuscita.
 
 Per un confronto A/B, registra A, cambia una condizione e applica lo scenario B mantenendo giorno e codice. B si ferma automaticamente all’orario di A; i valori sono confrontabili solo allo stesso orario. Ripetere uno scenario ripristina arrivi, profili iniziali e floor. I risultati descrivono la simulazione e non sono previsioni di uno store reale. Il laboratorio usa profili temporanei e preserva il salvataggio della Carriera.
+
+## Runner all’Express
+
+Di base il 25% dei clienti Express richiede un accessorio dal backstage. Il collega apre un ordine Operations, manda il cliente nell’attesa a destra di B1 e libera subito la cassa per la persona successiva. Il runner consegna direttamente a quel cliente, anche se il collega sta seguendo qualcun altro. La vendita Express e il questionario si registrano soltanto dopo la consegna; alla chiusura un accessorio ancora atteso lascia il percorso incompleto. Senza runner disponibile l’ordine resta in coda, anche in Carriera.
+
+In Osservazione, «Accessori Express dal backstage» modifica la quota da 0 a 100%; lo scenario «Collo di bottiglia backstage» usa il 75%. La necessità del runner appartiene al profilo del cliente, quindi cambiare l’organico non cambia quali clienti aspettano l’accessorio. Il pannello distingue la fila Express dai clienti in attesa del runner e mostra consegne concluse/richieste. L’attesa contribuisce alla fase consegna della CJ, all’esperienza e al NPS finale.

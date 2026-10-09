@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.8.1">
+<meta name="application-version" content="1.8.2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -160,11 +160,11 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.8.1">
-<link rel="stylesheet" href="game-modes.css?v=1.8.1">
-<link rel="stylesheet" href="app-update.css?v=1.8.1">
-<link rel="stylesheet" href="career-welcome.css?v=1.8.1">
-<link rel="stylesheet" href="observation-ui.css?v=1.8.1">
+<link rel="stylesheet" href="specialist-ui.css?v=1.8.2">
+<link rel="stylesheet" href="game-modes.css?v=1.8.2">
+<link rel="stylesheet" href="app-update.css?v=1.8.2">
+<link rel="stylesheet" href="career-welcome.css?v=1.8.2">
+<link rel="stylesheet" href="observation-ui.css?v=1.8.2">
 </head>
 <body>
 <div class="app">
@@ -324,19 +324,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.8.1"></script>
-<script src="graphics-walls.js?v=1.8.1"></script>
-<script src="graphics-people.js?v=1.8.1"></script>
-<script src="career-progression.js?v=1.8.1"></script>
-<script src="career-save.js?v=1.8.1"></script>
-<script src="specialist-mode.js?v=1.8.1"></script>
-<script src="specialist-ui.js?v=1.8.1"></script>
-<script src="game-modes.js?v=1.8.1"></script>
-<script src="career-welcome.js?v=1.8.1"></script>
-<script src="app-update.js?v=1.8.1"></script>
-<script src="observation-lab.js?v=1.8.1"></script>
-<script src="observation-engine.js?v=1.8.1"></script>
-<script src="observation-ui.js?v=1.8.1"></script>
+<script src="graphics-interior.js?v=1.8.2"></script>
+<script src="graphics-walls.js?v=1.8.2"></script>
+<script src="graphics-people.js?v=1.8.2"></script>
+<script src="career-progression.js?v=1.8.2"></script>
+<script src="career-save.js?v=1.8.2"></script>
+<script src="specialist-mode.js?v=1.8.2"></script>
+<script src="specialist-ui.js?v=1.8.2"></script>
+<script src="game-modes.js?v=1.8.2"></script>
+<script src="career-welcome.js?v=1.8.2"></script>
+<script src="app-update.js?v=1.8.2"></script>
+<script src="observation-lab.js?v=1.8.2"></script>
+<script src="observation-engine.js?v=1.8.2"></script>
+<script src="observation-ui.js?v=1.8.2"></script>
 <script>
 'use strict';
 
@@ -381,6 +381,11 @@ const POINT_GB = { x: 482, y: 1092, face: 'left', talk: { x: 428, y: 1082 },
 // Cassa Express sotto B1: cliente a sinistra del collega e fila lungo il lato sinistro del tavolo.
 const EXPRESS = { x: 1145, y: 740, face: 'left', talk: { x: 1070, y: 740 },
   line: Array.from({ length: 12 }, (_, i) => ({ x: 1050, y: 675 - i * 50 })) };
+// Chi aspetta il runner libera la cassa e la fila, nel corridoio a destra di B1.
+const EXPRESS_WAIT = Array.from({ length: 16 }, (_, i) => ({
+  x: i < 8 ? 1240 : 1260, y: i < 8 ? 720 + i * 50 : 1120 + (i - 8) * 50, taken: null,
+}));
+const EXPRESS_RUNNER_RATE = 0.25;
 // Pareti accessori: x del cliente davanti alla parete
 const WALL_SPOT = { L: 132, R: 1283 };
 const WALLS = [
@@ -670,6 +675,7 @@ function newDay(dayOfMonth, opts = {}) {
   SLOTS.forEach(s => s.taken = null);
   BAR.forEach(s => s.taken = null);
   QUEUE.forEach(s => s.taken = null);
+  EXPRESS_WAIT.forEach(s => s.taken = null);
   game = {
     mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours, observationConfig: labConfig,
     weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
@@ -688,6 +694,7 @@ function newDay(dayOfMonth, opts = {}) {
   };
   game.focus = { op: 0, sales: 0, cel: 0 };
   game.stats.setupsStarted = 0; game.stats.unfinished = 0;
+  game.stats.expressRunnerRequested = 0; game.stats.expressRunnerDelivered = 0;
   game.orders = [];
   game.dd = null; game.tactic = labConfig ? labConfig.tactic : 'equilibrio'; game.planning = false; game.checkpoint = false; game.history = [];
   game.arrivals = buildArrivals(opts.seed !== undefined ? opts.seed : Math.floor(nativeRandom() * 1e9), opts);
@@ -1601,6 +1608,11 @@ function releaseSlot(c) {
 
 function leave(c, outcome) {
   releaseSlot(c);
+  c.expressAwaiting = false;
+  if (outcome !== 'bought') {
+    for (const order of game.orders.filter(o => o.c === c && !o.done)) order.done = true;
+    c.pending = 0;
+  }
   for (const line of [game.lineIn, game.lineGB, game.lineEx]) { const i = line.indexOf(c); if (i >= 0) { line.splice(i, 1); line.forEach(x => x.lineIdx = -1); } }
   if (c.point && c.point.customer === c) { c.point.customer = null; c.point.state = 'idle'; }
   c.outcome = outcome;
@@ -1667,10 +1679,17 @@ function updateCustomer(c, dt) {
         serve(p, c, 0.5);
         if (p.post === POINT_GB) { say(p, 'check', 1); checkIn(p, c); }
         else if (p.post === EXPRESS) {
-          say(p, 'check', 1); say(c, 'check', 1); p.state = 'idle'; p.customer = null; p.served++;
-          game.stats.express++;
-          log(`${p.name} incassa un accessorio all'Express (B1)`);
-          leave(c, 'bought');
+          say(p, 'check', 1); p.state = 'idle'; p.customer = null; p.served++;
+          c.staff = null;
+          if (c.expressNeedsRunner === undefined) c.expressNeedsRunner = Math.random() <
+            (game.observationConfig ? game.observationConfig.expressRunnerRate : EXPRESS_RUNNER_RATE);
+          if (c.expressNeedsRunner) {
+            const spot = EXPRESS_WAIT.find(s => !s.taken) || {x: 1260, y: rand(1120, 1670), taken: null};
+            spot.taken = c; c.slot = spot; c.expressAwaiting = true; c.state = 'waitDelivery';
+            game.stats.expressRunnerRequested++;
+            requestItem(c, 'acc'); say(c, 'wait', 999); goTo(c, spot);
+            log(`${p.name} richiede un accessorio al runner: cliente #${c.id} in attesa, Express libero per il prossimo`);
+          } else completeExpress(c);
         } else {
           say(p, 'hi', 1); p.state = 'idle'; p.customer = null;
           log(`${p.name} accoglie un ${describe(c)}${c.kind === 'buy' ? '' : c.kind === 'genius' ? ' e lo manda al Point del Genius Bar' : c.kind === 'acc' ? ' e lo manda alle pareti' : ''}`);
@@ -1818,6 +1837,14 @@ function dispatch() {
 // Operations. Se l'ordine non è ancora partito, un accessorio chiesto dopo viaggia insieme al prodotto;
 // se è già partito serve un secondo giro, e il cliente aspetta di nuovo.
 const opsOn = () => game.staff.filter(x => x.role === 'ops');
+function completeExpress(c) {
+  if (c.gone || c.outcome || c.expressCompleted) return false;
+  c.expressCompleted = true; c.bought = true;
+  game.stats.express++;
+  if (c.expressAwaiting) game.stats.expressRunnerDelivered++;
+  log(`${c.servedBy ? c.servedBy.name : 'Express'} conclude l'acquisto all'Express (B1)${c.expressAwaiting ? ' dopo la consegna del runner' : ''}`);
+  say(c, 'check', 1); leave(c, 'bought'); return true;
+}
 function requestItem(c, what) {
   c.pending = (c.pending || 0) + 1;
   const open = game.orders.find(o => o.c === c && !o.ops && !o.done);
@@ -1838,15 +1865,17 @@ function nextDelivery(s) {
 }
 const handSpot = e => ({ x: e.x + (e.x > 700 ? -26 : 26), y: e.y + 22 });
 function delivered(o) {
+  if (o.done) return;
   const c = o.c;
   o.done = true;
+  if (c.gone || c.outcome) return;
   game.stats.delivered++; game.stats.deliverySum += game.time - o.t0;
   const k = !o.items.includes('product') ? 'acc' : o.c.product === 'iphone' ? 'iphone' : 'altri';
   const d = game.stats.byKind[k] = game.stats.byKind[k] || { n: 0, sum: 0, max: 0 };
   d.n++; d.sum += game.time - o.t0; d.max = Math.max(d.max, game.time - o.t0);
-  if (c.gone || c.outcome) return;
   c.pending = Math.max(0, c.pending - o.items.length);
   if (c.pending > 0 || c.state !== 'waitDelivery') return;
+  if (c.expressAwaiting) { completeExpress(c); return; }
   const sp = handTo(c);
   // lo Specialist che aspettava col cliente gli consegna il prodotto
   if (sp !== c) { sp.state = 'handover'; sp.t = 0.6; face(sp, c); say(sp, 'bag', 0.6); }
@@ -1858,7 +1887,7 @@ function dispatchOps() {
   if (!queued.length) return;
   // se oggi in Operations non c'è più nessuno, il prodotto lo prende chi vende
   if (!opsOn().length) {
-    if (!game.observationConfig) queued.forEach(delivered);
+    if (!game.observationConfig) queued.filter(o => !o.c.expressAwaiting).forEach(delivered);
     return; // In the laboratory a missing Operations team leaves a real backlog.
   }
   for (const o of queued) {
@@ -2744,6 +2773,7 @@ function endDay() {
     [playerMode ? 'Clienti ancora sul floor a fine turno' : 'Percorsi ancora aperti alla chiusura', playerMode ? game.customers.filter(c => !c.gone && !c.outcome).length : s.unfinished],
     ['…poi tornati per il Trade In', s.tradeAfter],
     ['Accessori all\'Express (B1)', s.express],
+    ['Express: richieste runner · consegne concluse', `${s.expressRunnerRequested} · ${s.expressRunnerDelivered}`],
     ['Accessori alle pareti', s.wallSales],
     ['Consegne dal backstage', s.delivered],
     ['…portate insieme ad altre nello stesso giro', s.batched],
@@ -2957,6 +2987,8 @@ function updatePanel() {
     ['Accessori Express · pareti', `${s.express} · ${s.wallSales}`],
     ['Servizi · errori', `${s.services} · ${s.errors}`],
     ['In fila all\'Express', game.lineEx.length],
+    ['Express: aspettano il runner', game.customers.filter(c => c.expressAwaiting && !c.outcome).length],
+    ['Express: consegne runner', `${s.expressRunnerDelivered} / ${s.expressRunnerRequested}`],
     ['Genius risolti', s.genius],
     ['Solo a guardare', s.looked + s.today],
     ['Fermi al Today', s.today],
@@ -3040,7 +3072,7 @@ function updateInfo(e, info) {
     const t = e.table;
     const here = game.customers.filter(c => (c.slot && c.slot.table === t) || (c.bar && c.bar.table === t)).length;
     const what = t.kind === 'support' ? 'Genius Bar' : t.kind === 'express' ? 'Cassa Express · accessori rapidi' : PRODUCT_NAME[t.product];
-    info.innerHTML = `<b>Tavolo ${t.name}</b> · ${what}<br><span class="sub">${t.kind === 'express' ? `in fila: ${game.lineEx.length}` : `clienti al tavolo: ${here}`}</span>`;
+    info.innerHTML = `<b>Tavolo ${t.name}</b> · ${what}<br><span class="sub">${t.kind === 'express' ? `in fila: ${game.lineEx.length} · aspettano il runner: ${game.customers.filter(c => c.expressAwaiting && !c.outcome).length}` : `clienti al tavolo: ${here}`}</span>`;
     return;
   }
   if (!e || (!e.isStaff && !game.customers.includes(e))) { game.selected = null; info.innerHTML = ''; return; }
@@ -3051,7 +3083,7 @@ function updateInfo(e, info) {
   } else {
     info.innerHTML = `<b>Cliente #${e.id}</b> · ${describe(e).replace('cliente ', '')}<br>
       <span class="sub">Familiarità tecnologica: <b>${['bassa', 'media', 'alta'][e.familiarity]}</b> · Fretta: <b>${['poca', 'media', 'molta'][e.hurry]}</b> · Umore: <b>${e.mood >= 65 ? 'buono' : e.mood >= 40 ? 'neutro' : 'teso'}</b>${e.supportRequests ? '<br>Confronti con una persona esperta: ' + e.supportRequests + ' · attesa aggiuntiva: ' + Math.round(e.supportWait || 0) + ' min' : ''}</span><br>
-      <span class="sub">${STATE_LABEL[e.state] || e.state}${e.staff ? ' · con ' + e.staff.name : ''}${e.state === 'waiting' ? ` · da ${e.wait.toFixed(0)} min` : ''} · esperienza <b>${Math.round(e.exp)}</b>${e.rude ? ' · scortese' : ''}${e.repair !== undefined && e.kind === 'genius' ? ' · riparazione ' + REPAIR_NAME[e.repair] : ''}</span>`;
+      <span class="sub">${e.expressAwaiting ? `aspetta l'accessorio dal runner · da ${(e.dWait || 0).toFixed(1)} min` : STATE_LABEL[e.state] || e.state}${e.staff ? ' · con ' + e.staff.name : ''}${e.state === 'waiting' ? ` · da ${e.wait.toFixed(0)} min` : ''} · esperienza <b>${Math.round(e.exp)}</b>${e.rude ? ' · scortese' : ''}${e.repair !== undefined && e.kind === 'genius' ? ' · riparazione ' + REPAIR_NAME[e.repair] : ''}</span>`;
   }
 }
 

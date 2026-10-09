@@ -25,7 +25,7 @@
     demand: { sales: 1, accessories: 1, express: 1, appointments: 1, walkins: 1, browse: 1 },
     staff: { S: 8, E: 3, P: 2, TS: 6, TE: 3, G: 1, C: 1, CP: 1, OP: 3, L: 2 },
     formation: 'accoglienza', tactic: 'equilibrio', skill: 50, motivation: 70, stress: 20,
-    delivery: 1, complexity: 0.25, patience: 1, noShow: 0.1, pattern: 'steady',
+    delivery: 1, complexity: 0.25, patience: 1, noShow: 0.1, expressRunnerRate: 0.25, pattern: 'steady',
   };
   const enumValue = (value, valid, fallback) => valid.includes(value) ? value : fallback;
   const finite = value => typeof value === 'number' && Number.isFinite(value);
@@ -51,6 +51,7 @@
       stress: bound(source.stress, 0, 100, defaults.stress), delivery: bound(source.delivery, 0.5, 3, defaults.delivery),
       complexity: bound(source.complexity, 0, 1, defaults.complexity), patience: bound(source.patience, 0.5, 2, defaults.patience),
       noShow: bound(source.noShow, 0, 1, defaults.noShow),
+      expressRunnerRate: bound(source.expressRunnerRate, 0, 1, defaults.expressRunnerRate),
       pattern: enumValue(source.pattern, ['steady', 'afternoon'], defaults.pattern),
     };
   }
@@ -62,7 +63,7 @@
     { id: 'supportpeak', label: 'Support sotto pressione', description: 'Molti appuntamenti, walk-in e riparazioni complesse.',
       config: normalizeConfig({ demand: { appointments: 2.2, walkins: 2 }, complexity: 0.7 }) },
     { id: 'opsbottleneck', label: 'Collo di bottiglia backstage', description: 'Un solo Operations e preparazione lenta: il prodotto arriva più tardi.',
-      config: normalizeConfig({ demand: { sales: 1.5, accessories: 1.5, express: 1.5 }, staff: { OP: 1 }, delivery: 2.5 }) },
+      config: normalizeConfig({ demand: { sales: 1.5, accessories: 1.5, express: 1.5 }, staff: { OP: 1 }, delivery: 2.5, expressRunnerRate: 0.75 }) },
     { id: 'balanced', label: 'Squadra preparata', description: 'Più figure esperte, buona motivazione e stress basso.',
       config: normalizeConfig({ staff: { E: 4, P: 3, TE: 4, G: 2, OP: 4 }, skill: 75, motivation: 85, stress: 10 }) },
   ];
@@ -103,6 +104,10 @@
       exp: wet ? 61 + r() * 12 : 64 + r() * 12, rude: r() < (wet ? 0.13 : 0.08),
     };
     if (channel.kind === 'acc') extra.quick = channel.id === 'express';
+    if (channel.id === 'express') {
+      const stock = rng(hash(config.seed, config.day + ':' + channel.id + ':stock:' + index));
+      extra.expressNeedsRunner = stock() < config.expressRunnerRate;
+    }
     if (channel.kind === 'buy') {
       const p = r();
       extra.product = p < 0.5 ? 'iphone' : p < 0.7 ? 'watch' : p < 0.85 ? 'ipad' : 'mac';
