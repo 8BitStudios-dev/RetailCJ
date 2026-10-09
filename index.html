@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.8.0">
+<meta name="application-version" content="1.8.1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -160,11 +160,11 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.8.0">
-<link rel="stylesheet" href="game-modes.css?v=1.8.0">
-<link rel="stylesheet" href="app-update.css?v=1.8.0">
-<link rel="stylesheet" href="career-welcome.css?v=1.8.0">
-<link rel="stylesheet" href="observation-ui.css?v=1.8.0">
+<link rel="stylesheet" href="specialist-ui.css?v=1.8.1">
+<link rel="stylesheet" href="game-modes.css?v=1.8.1">
+<link rel="stylesheet" href="app-update.css?v=1.8.1">
+<link rel="stylesheet" href="career-welcome.css?v=1.8.1">
+<link rel="stylesheet" href="observation-ui.css?v=1.8.1">
 </head>
 <body>
 <div class="app">
@@ -324,19 +324,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.8.0"></script>
-<script src="graphics-walls.js?v=1.8.0"></script>
-<script src="graphics-people.js?v=1.8.0"></script>
-<script src="career-progression.js?v=1.8.0"></script>
-<script src="career-save.js?v=1.8.0"></script>
-<script src="specialist-mode.js?v=1.8.0"></script>
-<script src="specialist-ui.js?v=1.8.0"></script>
-<script src="game-modes.js?v=1.8.0"></script>
-<script src="career-welcome.js?v=1.8.0"></script>
-<script src="app-update.js?v=1.8.0"></script>
-<script src="observation-lab.js?v=1.8.0"></script>
-<script src="observation-engine.js?v=1.8.0"></script>
-<script src="observation-ui.js?v=1.8.0"></script>
+<script src="graphics-interior.js?v=1.8.1"></script>
+<script src="graphics-walls.js?v=1.8.1"></script>
+<script src="graphics-people.js?v=1.8.1"></script>
+<script src="career-progression.js?v=1.8.1"></script>
+<script src="career-save.js?v=1.8.1"></script>
+<script src="specialist-mode.js?v=1.8.1"></script>
+<script src="specialist-ui.js?v=1.8.1"></script>
+<script src="game-modes.js?v=1.8.1"></script>
+<script src="career-welcome.js?v=1.8.1"></script>
+<script src="app-update.js?v=1.8.1"></script>
+<script src="observation-lab.js?v=1.8.1"></script>
+<script src="observation-engine.js?v=1.8.1"></script>
+<script src="observation-ui.js?v=1.8.1"></script>
 <script>
 'use strict';
 
@@ -378,9 +378,9 @@ const POINT_IN = { x: 1272, y: 235, face: 'up', talk: { x: 1272, y: 190 },
 const POINT_IN2 = { x: 1222, y: 235, face: 'up', talk: { x: 1222, y: 190 }, line: POINT_IN.line };
 const POINT_GB = { x: 482, y: 1092, face: 'left', talk: { x: 428, y: 1082 },
   line: [385, 345, 305, 265, 225, 185, 145].map(x => ({ x, y: 1078 })) };
-// Cassa Express al tavolo B1: chi lavora sta a destra del tavolo, il cliente a sinistra
-const EXPRESS = { x: 1235, y: 560, face: 'left', talk: { x: 1077, y: 560 },
-  line: [[1077, 615], [1077, 665], [1060, 725], [1015, 725], [970, 725]].map(([x, y]) => ({ x, y })) };
+// Cassa Express sotto B1: cliente a sinistra del collega e fila lungo il lato sinistro del tavolo.
+const EXPRESS = { x: 1145, y: 740, face: 'left', talk: { x: 1070, y: 740 },
+  line: Array.from({ length: 12 }, (_, i) => ({ x: 1050, y: 675 - i * 50 })) };
 // Pareti accessori: x del cliente davanti alla parete
 const WALL_SPOT = { L: 132, R: 1283 };
 const WALLS = [

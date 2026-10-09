@@ -70,13 +70,13 @@ Ruolo e competenza sono inclusi nei salvataggi e nei backup versione 2. I salvat
 
 ## Versione e aggiornamento
 
-La versione corrente è **1.8.0**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
+La versione corrente è **1.8.1**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
 
 La versione è dichiarata nella meta `application-version` di `index.html` e nei parametri `v` dei file JavaScript e CSS. A ogni rilascio aggiornare entrambi: il ricaricamento usa un URL nuovo e i file della nuova versione non riutilizzano la copia precedente nella cache.
 
 ## Laboratorio Osservazione
 
-La versione 1.8.0 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
+La versione 1.8.1 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
 
 Il personale del turno è configurabile per tutti i dieci ruoli, fino a 80 persone complessive. La copertura include Point ingresso, Point Support ed Express; un solo tecnico al Bar copre il Point e non aumenta la capacità di riparazione. Si possono cambiare disposizione, priorità, competenza iniziale, motivazione, stress, meteo, picco pomeridiano, complessità delle visite, pazienza, mancate presentazioni e tempi Operations. Con zero Operations gli ordini restano in attesa.
 
