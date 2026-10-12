@@ -7,7 +7,7 @@
 .introFloorView { display:flex; justify-content:center; align-items:center; gap:14px; margin:12px 0; color:var(--muted); font-size:12px; }
 .introBox .floorViewSelector button { min-height:34px; min-width:65px; font-size:13px; }
 .floorCameraBar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:0 0 10px; }
-.floorCameraBar>div { display:flex; gap:5px; }
+.floorCameraBar>div { display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
 .floorCameraBar button { min-height:32px; border-radius:7px; font-size:12px; }
 .floorCameraBar>span { font-size:10px; color:var(--muted); }
 .floorRendererBadge { position:absolute; top:12px; left:12px; pointer-events:none; background:#1a3145e8; color:#e0f5ff; border:1px solid #8bbdd140; border-radius:8px; padding:6px 9px; font-size:11px; }

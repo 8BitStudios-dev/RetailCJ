@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.9.0">
+<meta name="application-version" content="1.9.1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -160,12 +160,12 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.9.0">
-<link rel="stylesheet" href="game-modes.css?v=1.9.0">
-<link rel="stylesheet" href="app-update.css?v=1.9.0">
-<link rel="stylesheet" href="career-welcome.css?v=1.9.0">
-<link rel="stylesheet" href="observation-ui.css?v=1.9.0">
-<link rel="stylesheet" href="view-mode.css?v=1.9.0">
+<link rel="stylesheet" href="specialist-ui.css?v=1.9.1">
+<link rel="stylesheet" href="game-modes.css?v=1.9.1">
+<link rel="stylesheet" href="app-update.css?v=1.9.1">
+<link rel="stylesheet" href="career-welcome.css?v=1.9.1">
+<link rel="stylesheet" href="observation-ui.css?v=1.9.1">
+<link rel="stylesheet" href="view-mode.css?v=1.9.1">
 </head>
 <body>
 <div class="app">
@@ -191,7 +191,7 @@
     <div class="goalRow" id="goalRow" hidden></div>
   </div>
   <div class="stage">
-    <div id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D"><div><button type="button" data-floor-view="overview" class="on">Panoramica</button><button type="button" data-floor-view="top">Dall’alto</button><button type="button" data-floor-view="express">Express</button></div><span>Trascina per ruotare · due dita o rotella per zoomare</span></div>
+    <div id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D"><div role="group" aria-label="Inquadrature del floor"><button type="button" data-floor-view="overview" class="on">Panoramica</button><button type="button" data-floor-view="top">Dall’alto</button><button type="button" data-floor-view="express">Express</button><button type="button" data-floor-view="product">Point Product</button><button type="button" data-floor-view="genius">Point Genius Bar</button></div><span>Trascina per ruotare · due dita o rotella per zoomare</span></div>
     <div class="scroller" id="scroller"><canvas id="game" width="576" height="760" aria-label="Pianta di Piazza Liberty: seleziona una persona o un tavolo"></canvas><canvas id="floor3d" hidden tabindex="0" aria-label="Floor 3D: trascina per ruotare, usa lo zoom e seleziona una persona o un tavolo"></canvas><div id="rendererBadge" class="floorRendererBadge" hidden><span aria-hidden="true">●</span> <span id="rendererLabel">Floor in 3D</span></div></div>
     <div class="tip" id="tip" hidden><div class="tipText"></div><div class="acts"></div></div>
     <div class="overlay show" id="intro">
@@ -330,19 +330,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.9.0"></script>
-<script src="graphics-walls.js?v=1.9.0"></script>
-<script src="graphics-people.js?v=1.9.0"></script>
-<script src="career-progression.js?v=1.9.0"></script>
-<script src="career-save.js?v=1.9.0"></script>
-<script src="specialist-mode.js?v=1.9.0"></script>
-<script src="specialist-ui.js?v=1.9.0"></script>
-<script src="game-modes.js?v=1.9.0"></script>
-<script src="career-welcome.js?v=1.9.0"></script>
-<script src="app-update.js?v=1.9.0"></script>
-<script src="observation-lab.js?v=1.9.0"></script>
-<script src="observation-engine.js?v=1.9.0"></script>
-<script src="observation-ui.js?v=1.9.0"></script>
+<script src="graphics-interior.js?v=1.9.1"></script>
+<script src="graphics-walls.js?v=1.9.1"></script>
+<script src="graphics-people.js?v=1.9.1"></script>
+<script src="career-progression.js?v=1.9.1"></script>
+<script src="career-save.js?v=1.9.1"></script>
+<script src="specialist-mode.js?v=1.9.1"></script>
+<script src="specialist-ui.js?v=1.9.1"></script>
+<script src="game-modes.js?v=1.9.1"></script>
+<script src="career-welcome.js?v=1.9.1"></script>
+<script src="app-update.js?v=1.9.1"></script>
+<script src="observation-lab.js?v=1.9.1"></script>
+<script src="observation-engine.js?v=1.9.1"></script>
+<script src="observation-ui.js?v=1.9.1"></script>
 <script>
 'use strict';
 
@@ -3332,7 +3332,8 @@ window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer,
 window.PLFloorView = {
   snapshot: () => ({
     layout: {width: WORLD_W, height: WORLD_H, tables: TABLES, support: SUPPORT, walls: WALLS, trees: TREES,
-      stools: STOOLS, screen: SCREEN, door: DOOR, backDoor: BACK_DOOR, express: EXPRESS},
+      stools: STOOLS, screen: SCREEN, door: DOOR, backDoor: BACK_DOOR, express: EXPRESS,
+      pointProduct: POINT_IN, pointGenius: POINT_GB},
     customers: game.customers, staff: game.staff, selected: game.selected, time: game.time, speed: game.speed,
     paused: game.speed === 0 || game.briefing || game.over || game.planning || modePicking || intro.on,
   }),
@@ -3359,6 +3360,6 @@ window.PLFloorView = {
   get active() { return floorUse3D; },
 };
 </script>
-<script src="view-mode.js?v=1.9.0"></script>
+<script src="view-mode.js?v=1.9.1"></script>
 </body>
 </html>

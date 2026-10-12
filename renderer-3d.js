@@ -215,7 +215,9 @@ export class BetaFloorRenderer {
     for (const tree of layout.trees || []) this.buildTree(tree);
     for (const stool of layout.stools || []) this.buildStool(stool);
     if (layout.screen) this.buildScreen(layout.screen);
-    if (layout.express) this.buildExpress(layout.express);
+    if (layout.express) this.buildPoint(layout.express, 'EXPRESS', 0.91);
+    if (layout.pointProduct) this.buildPoint(layout.pointProduct, 'POINT PRODUCT', 1.6);
+    if (layout.pointGenius) this.buildPoint(layout.pointGenius, 'POINT GENIUS BAR', 1.85);
     if (layout.door) this.buildDoor(layout.door, 'INGRESSO', '#1680cf');
     if (layout.backDoor) this.buildDoor(layout.backDoor, 'OPERATIONS', '#688c79');
     this.batchStaticWorld();
@@ -371,14 +373,14 @@ export class BetaFloorRenderer {
     group.add(caption);
   }
 
-  buildExpress(express) {
-    const at = this.point(express.x, express.y);
-    const marker = this.label('EXPRESS', { width: 0.91, height: 0.25, background: '#287dcc', foreground: '#ffffff', fontSize: 40 });
+  buildPoint(station, text, width) {
+    const at = this.point(station.x, station.y);
+    const marker = this.label(text, { width, height: 0.25, background: '#287dcc', foreground: '#ffffff', fontSize: 40 });
     marker.position.copy(at).add(new THREE.Vector3(0, 1.18, 0.28));
     this.world.add(marker);
     const geometry = this.keep(new THREE.RingGeometry(0.06, 0.085, 16));
     const material = this.material('#3288d4', { basic: true, opacity: 0.48 });
-    (express.line || []).forEach(spot => {
+    (station.line || []).forEach(spot => {
       const marker = new THREE.Mesh(geometry, material);
       marker.position.copy(this.point(spot.x, spot.y, 0.025));
       marker.rotation.x = -Math.PI / 2;
@@ -628,16 +630,25 @@ export class BetaFloorRenderer {
   }
 
   setView(view) {
-    this.view = ['overview', 'top', 'express'].includes(view) ? view : 'overview';
+    this.view = ['overview', 'top', 'express', 'product', 'genius'].includes(view) ? view : 'overview';
     this.focused = false;
+    this.viewRegion = null;
     this.camera.up.set(0, 1, 0);
-    if (this.view === 'express') {
-      const express = this.layout?.express || { x: 1145, y: 740 };
-      const center = this.point(express.x - 45, express.y - 90, 0.2);
+    const stationKey = { express: 'express', product: 'pointProduct', genius: 'pointGenius' }[this.view];
+    const station = this.layout?.[stationKey];
+    if (station) {
+      const spots = [station, station.talk, ...(station.line || []), this.view === 'product' ? this.layout.door : null].filter(Boolean);
+      const minX = Math.min(...spots.map(spot => spot.x)), maxX = Math.max(...spots.map(spot => spot.x));
+      const minY = Math.min(...spots.map(spot => spot.y)), maxY = Math.max(...spots.map(spot => spot.y));
+      // Include people, station labels and room around the queue, rather than
+      // zooming onto only the colleague at the front of the line.
+      this.viewRegion = [];
+      for (const x of [minX - 100, maxX + 100]) for (const y of [minY - 80, maxY + 80]) {
+        for (const height of [0, 1.55]) this.viewRegion.push(this.point(x, y, height));
+      }
+      const center = this.point((minX + maxX) / 2, (minY + maxY) / 2, 0.25);
       this.controls.target.copy(center);
-      this.camera.position.copy(center).add(new THREE.Vector3(4.4, 7.1, 5.5));
-      const aspect = (this.canvas.clientWidth || 850) / (this.canvas.clientHeight || 600);
-      this.span = Math.max(6.3, 7.3 / aspect);
+      this.camera.position.copy(center).add(new THREE.Vector3(this.view === 'product' ? -4.4 : 4.4, 7.1, 5.5));
     } else {
       this.controls.target.set(0, 0.15, 0);
       this.camera.position.set(this.view === 'top' ? 0 : 16, this.view === 'top' ? 36 : 24, this.view === 'top' ? 0.01 : 20);
@@ -647,6 +658,19 @@ export class BetaFloorRenderer {
     this.camera.lookAt(this.controls.target);
     this.controls.update();
     this.resize();
+  }
+
+  fitStationSpan(aspect) {
+    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+    const right = new THREE.Vector3().crossVectors(this.camera.up, direction).normalize();
+    const up = new THREE.Vector3().crossVectors(direction, right).normalize();
+    let maxX = 0, maxY = 0;
+    for (const point of this.viewRegion) {
+      const relative = point.clone().sub(this.controls.target);
+      maxX = Math.max(maxX, Math.abs(relative.dot(right)));
+      maxY = Math.max(maxY, Math.abs(relative.dot(up)));
+    }
+    return Math.max(5.8, maxY * 2, maxX * 2 / aspect) * 1.08;
   }
 
   focus(entity) {
@@ -668,7 +692,7 @@ export class BetaFloorRenderer {
     const height = Math.max(1, this.canvas.clientHeight || this.canvas.parentElement?.clientHeight || 600);
     this.renderer.setSize(width, height, false);
     const aspect = width / height;
-    if (!this.focused && this.view !== 'express') this.span = this.fitSpan();
+    if (!this.focused) this.span = this.viewRegion ? this.fitStationSpan(aspect) : this.fitSpan();
     const span = this.span || 23;
     this.camera.left = -span * aspect / 2;
     this.camera.right = span * aspect / 2;

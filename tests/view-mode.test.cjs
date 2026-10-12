@@ -134,7 +134,7 @@ test('a saved 3D preference restores the production career and level progress th
   const fixture = rendererModule();
   const env = makeEnvironment({storage: storage('3d'), webgl2: true,
     importFloorRenderer: specifier => {
-      assert.equal(specifier, './renderer-3d.js?v=1.9.0');
+      assert.equal(specifier, './renderer-3d.js?v=1.9.1');
       return Promise.resolve(fixture.module);
     }});
   const before = productionEntries(env);
@@ -162,11 +162,17 @@ test('the real intro, floor, and camera controls switch one frozen career visit 
   assert.equal(fixture.calls.frames.length, 1);
   assert.equal(fixture.calls.frames[0].snapshot.customers, before.entities[0]);
   assert.equal(fixture.calls.frames[0].snapshot.staff, before.entities[1]);
-  const top = env.context.document.querySelector('[data-floor-view="top"]');
-  top.click();
-  const express = env.context.document.querySelector('[data-floor-view="express"]');
-  express.click();
-  assert.deepEqual(fixture.calls.views, ['overview', 'top', 'express']);
+  const controls = env.context.document.querySelectorAll('[data-floor-view]');
+  assert.deepEqual(controls.map(button => button.dataset.floorView).sort(), ['express', 'genius', 'overview', 'product', 'top']);
+  for (const view of ['top', 'product', 'genius', 'express']) {
+    env.context.document.querySelector(`[data-floor-view="${view}"]`).click();
+    for (const button of controls) {
+      assert.equal(button.classList.contains('on'), button.dataset.floorView === view);
+      assert.equal(button.getAttribute('aria-pressed'), String(button.dataset.floorView === view));
+    }
+    assertVisit(env, before);
+  }
+  assert.deepEqual(fixture.calls.views, ['overview', 'top', 'product', 'genius', 'express']);
   assert.equal(env.storage.get(VIEW_KEY), '3d');
   assertVisit(env, before);
 
@@ -178,6 +184,7 @@ test('the real intro, floor, and camera controls switch one frozen career visit 
   assert.ok(env.counters.fills > fills, 'The production 2D floor draws after the view changes');
   assert.equal(fixture.calls.frames.length, 1);
   assert.equal(env.storage.get(VIEW_KEY), '2d');
+  assert.ok(controls.every(button => button.disabled), 'Camera focus buttons are disabled in 2D');
   assertVisit(env, before);
 
   modeButtons(env, '3d')[1].click();

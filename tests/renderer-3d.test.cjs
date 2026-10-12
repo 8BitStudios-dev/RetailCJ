@@ -58,7 +58,7 @@ async function fixture({width = 850, height = 600, world = false} = {}) {
   const layout = JSON.parse(JSON.stringify(env.context.PLFloorView.snapshot().layout));
   if (world) view.buildWorld(deepFreeze(layout));
   else {view.layout = layout; view.setView('overview');}
-  return {THREE, view, layout};
+  return {THREE, view, layout, env};
 }
 
 test('Three.js scene math only, without WebGL: frozen simulation entities remain unchanged and finite', async () => {
@@ -127,6 +127,59 @@ test('real orthographic cameras fit the complete floor in overview and top views
       assert.ok(view.camera instanceof THREE.OrthographicCamera);
     }
   }
+});
+
+test('Product, Genius Bar and Express cameras frame their real point, customers and queues through desktop/mobile resizes', async () => {
+  const {THREE, view, layout, env} = await fixture();
+  const unchangedLayout = JSON.stringify(layout);
+  assert.equal(env.context.PLFloorView.snapshot().layout.pointProduct, env.evaluate('POINT_IN'));
+  assert.equal(env.context.PLFloorView.snapshot().layout.pointGenius, env.evaluate('POINT_GB'));
+  assert.deepEqual(layout.pointProduct, JSON.parse(env.evaluate('JSON.stringify(POINT_IN)')));
+  assert.deepEqual(layout.pointGenius, JSON.parse(env.evaluate('JSON.stringify(POINT_GB)')));
+
+  const assertInside = (position, description) => {
+    const screen = position.clone().project(view.camera);
+    assert.ok(Math.abs(screen.x) < 0.99 && Math.abs(screen.y) < 0.99,
+      `${description} is clipped: NDC ${screen.x.toFixed(3)},${screen.y.toFixed(3)}`);
+    assert.ok(screen.z > -1 && screen.z < 1, `${description} is outside the depth range`);
+  };
+  for (const [mode, point] of [['product', layout.pointProduct], ['genius', layout.pointGenius], ['express', layout.express]]) {
+    assert.ok(point && point.talk && point.line.length > 0, `${mode} supplies the actual simulation point and queue`);
+    const locations = [point, point.talk, ...point.line, ...(mode === 'product' ? [layout.door] : [])];
+    const people = locations.slice(1).map((location, index) => customer({id: `${mode}-${index}`,
+      x: location.x, y: location.y, state: 'waiting'}));
+    view.reconcile(snapshot({staff: [staff({id: mode, x: point.x, y: point.y, state: 'idle'})], customers: people}), 0);
+    view.canvas.clientWidth = 850; view.canvas.clientHeight = 600;
+    view.setView(mode);
+    assert.equal(view.view, mode, 'The requested point is a real camera view, not an overview fallback');
+    const target = view.controls.target.clone();
+    const cameraPosition = view.camera.position.clone();
+
+    // Resize only: a selected point must survive orientation changes without
+    // selecting it again, and its entire real queue must remain in the frame.
+    for (const [width, height] of [[850, 600], [360, 700], [1280, 480], [390, 600], [850, 600]]) {
+      view.canvas.clientWidth = width; view.canvas.clientHeight = height;
+      view.resize();
+      assert.equal(view.view, mode);
+      assert.ok(view.controls.target.equals(target), `${mode} focus moved after resize`);
+      assert.ok(view.camera.position.equals(cameraPosition), `${mode} viewing direction moved after resize`);
+      assert.equal(view.focused, false, 'A point view is independent of following a selected person');
+      const description = `${mode} ${width}×${height}`;
+      for (const [index, location] of locations.entries()) {
+        for (const height of [0, 1.1]) assertInside(view.point(location.x, location.y, height), `${description} point ${index} height ${height}`);
+      }
+      // Use the real merged Three.js body geometry, not just actor centers.
+      // This catches a queue fitting while a character's head or limbs clip.
+      view.scene.updateMatrixWorld(true);
+      for (const actor of view.actors.values()) {
+        const bounds = new THREE.Box3().setFromObject(actor.body);
+        assert.ok(bounds.getSize(new THREE.Vector3()).length() > 0.7);
+        for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y])
+          for (const z of [bounds.min.z, bounds.max.z]) assertInside(new THREE.Vector3(x, y, z), `${description} actor ${actor.entity.id}`);
+      }
+    }
+  }
+  assert.equal(JSON.stringify(layout), unchangedLayout, 'Framing cannot modify the simulation layout');
 });
 
 test('nonselectable static fixtures use real InstancedMesh batches while tables and labels keep their identities', async () => {

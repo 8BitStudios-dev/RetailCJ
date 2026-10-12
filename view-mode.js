@@ -93,7 +93,7 @@
     }
     if (pending) return pending;
     message('Caricamento della vista 3D… La giornata continua; puoi restare in 2D.');
-    pending = import('./renderer-3d.js?v=1.9.0').then(({ BetaFloorRenderer }) => {
+    pending = import('./renderer-3d.js?v=1.9.1').then(({ BetaFloorRenderer }) => {
       renderer = new BetaFloorRenderer({ canvas, onSelect: api.select });
       api.attach(renderer);
       if (desiredMode === '3d') return activate();
