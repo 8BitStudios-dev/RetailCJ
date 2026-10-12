@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
 
-const VERSION = '1.8.3';
+const VERSION = '1.9.0';
 const CAREER_KEY = 'plgame.career.v1';
 const buttons = env => env.context.document.querySelectorAll('[data-app-update]');
 const statuses = env => env.context.document.querySelectorAll('[data-app-update-status]');

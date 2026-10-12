@@ -2,8 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {makeEnvironment} = require('./environment.cjs');
-const observation = require('../dist/observation-lab.js');
+const path = require('node:path');
+const {makeEnvironment, gameDirectory} = require('./environment.cjs');
+const observation = require(path.join(gameDirectory, 'observation-lab.js'));
 
 const plain = value => JSON.parse(JSON.stringify(value));
 const noDemand = {sales: 0, accessories: 0, express: 0, appointments: 0, walkins: 0, browse: 0};

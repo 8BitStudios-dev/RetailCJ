@@ -280,16 +280,32 @@ function makeEnvironment(options = {}) {
     setTimeout, clearTimeout,
   };
   if (options.specialistMode !== undefined) context.PL_SPECIALIST_MODE = options.specialistMode;
+  if (options.webgl2) context.WebGL2RenderingContext = function WebGL2RenderingContext() {};
+  if (options.importFloorRenderer) context.__importFloorRenderer = options.importFloorRenderer;
   context.window = context;
   vm.createContext(context);
-  for (const match of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
-    const file = match[1].split(/[?#]/, 1)[0];
-    const source = path.join(gameDirectory, file);
-    if (!fs.existsSync(source)) throw new Error('Specialist integration is not ready: missing ' + file);
-    vm.runInContext(fs.readFileSync(source, 'utf8'), context, {filename: file});
+  // Classic scripts execute in document order. The view controller follows
+  // the inline simulation adapter it connects to; module scripts are not run.
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const attributes = match[1];
+    if (/\btype\s*=\s*["']module["']/i.test(attributes)) continue;
+    const external = attributes.match(/\bsrc=["']([^"']+)["']/i);
+    if (external) {
+      const file = external[1].split(/[?#]/, 1)[0];
+      const source = path.join(gameDirectory, file);
+      if (!fs.existsSync(source)) throw new Error('Specialist integration is not ready: missing ' + file);
+      let script = fs.readFileSync(source, 'utf8');
+      // Only these tests substitute the lazy module boundary. The production
+      // controller and its promises, preference handling and DOM remain real.
+      if (file === 'view-mode.js' && options.importFloorRenderer) {
+        script = script.replace(/import\((['"])\.\/renderer-3d\.js[^'"]*\1\)/g,
+          specifier => '__importFloorRenderer(' + specifier.slice(7, -1) + ')');
+      }
+      vm.runInContext(script, context, {filename: file});
+    } else if (match[2].trim()) {
+      vm.runInContext(match[2], context, {filename: 'index.html'});
+    }
   }
-  const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]).filter(source => source.trim()).join('\n');
-  vm.runInContext(inline, context, {filename: 'index.html'});
 
   const evaluate = expression => vm.runInContext(expression, context, {timeout: 10000});
   return {
@@ -309,4 +325,4 @@ function makeEnvironment(options = {}) {
   };
 }
 
-module.exports = {makeEnvironment};
+module.exports = {makeEnvironment, gameDirectory};

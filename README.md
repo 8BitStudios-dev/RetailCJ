@@ -70,13 +70,13 @@ Ruolo e competenza sono inclusi nei salvataggi e nei backup versione 2. I salvat
 
 ## Versione e aggiornamento
 
-La versione corrente è **1.8.3**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
+La versione corrente è **1.9.0**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
 
 La versione è dichiarata nella meta `application-version` di `index.html` e nei parametri `v` dei file JavaScript e CSS. A ogni rilascio aggiornare entrambi: il ricaricamento usa un URL nuovo e i file della nuova versione non riutilizzano la copia precedente nella cache.
 
 ## Laboratorio Osservazione
 
-La versione 1.8.3 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
+La versione 1.9.0 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
 
 Il personale del turno è configurabile per tutti i dieci ruoli, fino a 80 persone complessive. La copertura include Point ingresso, Point Support ed Express; un solo tecnico al Bar copre il Point e non aumenta la capacità di riparazione. Si possono cambiare disposizione, priorità, competenza iniziale, motivazione, stress, meteo, picco pomeridiano, complessità delle visite, pazienza, mancate presentazioni e tempi Operations. Con zero Operations gli ordini restano in attesa.
 
@@ -95,3 +95,11 @@ In Osservazione, «Accessori Express dal backstage» modifica la quota da 0 a 10
 ## Uscita visibile dall’Express
 
 Dopo l’acquisto il cliente percorre il floor fino alla porta. L’arrivo alla cassa non viene più confuso con l’arrivo all’uscita: il cliente resta visibile lungo il tragitto e viene rimosso soltanto alla fine. La stessa correzione vale per gli altri percorsi conclusi dal cliente. Chi aspetta il runner mantiene la propria attesa e il suo ordine.
+
+## Viste 2D e 3D nello stesso sito
+
+RetailCJ 1.9.0 integra la pianta 2D e il floor 3D nello stesso indirizzo. Il selettore 2D / 3D è disponibile nel menu iniziale e durante il gioco, in Carriera e in Osservazione. Le due viste leggono la stessa simulazione: cambiare vista non riavvia il turno e conserva clienti, code, assegnazioni, consegne e statistiche.
+
+La prima apertura usa il 2D; la scelta viene ricordata nella sola preferenza `plgame.view`. Carriera, modalità, livelli e backup conservano i namespace e il formato originali. Il 3D viene caricato soltanto su richiesta, con Three.js 0.186.1 incluso in `vendor/` e relativa licenza MIT. Panoramica, Dall’alto ed Express impostano le inquadrature; trascinamento, rotella e due dita controllano camera e zoom.
+
+Se il browser non supporta WebGL 2, il caricamento fallisce o il contesto grafico si perde, il gioco resta utilizzabile in 2D con la stessa giornata. Il renderer modifica solo i propri oggetti grafici. I test verificano continuità della Carriera, caricamento asincrono, fallback e selezione nella scena con Three.js reale; l’aspetto e la fluidità richiedono una verifica nel browser.

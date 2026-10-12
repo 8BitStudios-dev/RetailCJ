@@ -1,0 +1,33 @@
+.floorViewRow { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px; color:var(--muted); font-size:11px; }
+.floorViewSelector { display:inline-flex; gap:4px; }
+.floorViewSelector button { padding:4px 15px; min-height:32px; font-size:12px; }
+.floorViewSelector button[aria-pressed="true"] { background:var(--accent); border-color:#729fe7; color:white; }
+.floorViewStatus { margin:5px 0 0; font-size:10px; line-height:1.45; color:#b8ccdf; }
+.floorViewStatus:empty { display:none; }
+.introFloorView { display:flex; justify-content:center; align-items:center; gap:14px; margin:12px 0; color:var(--muted); font-size:12px; }
+.introBox .floorViewSelector button { min-height:34px; min-width:65px; font-size:13px; }
+.floorCameraBar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:0 0 10px; }
+.floorCameraBar>div { display:flex; gap:5px; }
+.floorCameraBar button { min-height:32px; border-radius:7px; font-size:12px; }
+.floorCameraBar>span { font-size:10px; color:var(--muted); }
+.floorRendererBadge { position:absolute; top:12px; left:12px; pointer-events:none; background:#1a3145e8; color:#e0f5ff; border:1px solid #8bbdd140; border-radius:8px; padding:6px 9px; font-size:11px; }
+.floorRendererBadge>span:first-child { color:#79d8b1; font-size:9px; }
+#floor3d[hidden],#game[hidden],#cameraControls[hidden],#rendererBadge[hidden] { display:none; }
+.floor3dActive .app { max-width:1600px; margin:0 auto; grid-template-columns:minmax(0,1fr) 340px; }
+.floor3dActive .stage { min-width:0; }
+.floor3dActive .side { width:auto; }
+.floor3dActive .scroller { position:relative; width:100%; border-radius:12px; overflow:hidden; background:#d9e4e8; }
+#floor3d { width:100%; height:clamp(460px,calc(100svh - 90px),900px); max-height:none; aspect-ratio:auto; image-rendering:auto; cursor:grab; touch-action:none; }
+#floor3d:active { cursor:grabbing; }
+#floor3d:focus-visible { outline:3px solid #78bdde; outline-offset:-4px; }
+.floor3dActive .tip { display:none; }
+@media(max-width:900px) and (min-width:761px) { .floor3dActive .app { grid-template-columns:minmax(0,1fr) 300px; } }
+@media(max-width:760px) {
+  .floor3dActive .app { grid-template-columns:minmax(0,1fr); }
+  #floor3d { height:clamp(360px,60svh,570px); }
+  .floorViewRow { margin-top:6px; }
+  .floorViewSelector button { min-height:32px; padding:3px 13px; }
+  .floorCameraBar button { min-height:34px; padding:6px 8px; font-size:11px; }
+  .floorCameraBar>span { width:100%; }
+  .introFloorView { margin:9px 0; }
+}

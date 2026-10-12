@@ -2,8 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {makeEnvironment} = require('./environment.cjs');
-const observation = require('../dist/observation-lab.js');
+const path = require('node:path');
+const {makeEnvironment, gameDirectory} = require('./environment.cjs');
+const observation = require(path.join(gameDirectory, 'observation-lab.js'));
 
 const CAREER_KEY = 'plgame.career.v1';
 const plain = value => JSON.parse(JSON.stringify(value));
