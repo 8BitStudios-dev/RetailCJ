@@ -208,6 +208,80 @@ test('a missing accessory frees the cashier for the next checkout and remains an
   assert.ok(delivery.wait >= 3 - 1e-9);
 });
 
+test('Express keeps serving during a rotation blocked by a product order and hands over after the runner arrives', () => {
+  const env = fixture();
+  env.evaluate(`window.incumbent = cashier;
+    window.relief = game.staff.find(person => person.role === 'specialist');
+    relief.hidden = false; relief.state = 'waitProduct'; relief.path = [];
+    relief.x = relief.home.x; relief.y = relief.home.y;
+    window.sale = spawnCustomer('buy', {journeyId: 'rotation-product', labChannel: 'sales',
+      product: 'iphone', setup: null, tradeIn: false, finance: false, familiarity: 0, hurry: 0, mood: 90});
+    game.lineIn = game.lineIn.filter(customer => customer !== sale);
+    sale.state = 'waitDelivery'; sale.bought = true; sale.path = [];
+    sale.x = relief.x + 26; sale.y = relief.y - 22;
+    sale.staff = relief; relief.customer = sale;
+    requestItem(sale, 'product');
+    cashier.nextSlot = relief.slot; relief.nextSlot = cashier.slot;`);
+  const incumbent = env.context.incumbent;
+  const relief = env.context.relief;
+  const order = env.game().orders[0];
+  assert.equal(env.evaluate('canLeavePost(incumbent)'), false);
+  for (const name of ['rotationFirst', 'rotationSecond']) {
+    const customer = startExpress(env, name, true);
+    finishExpress(env, name);
+    assert.equal(customer.state, 'waitDelivery');
+    assert.equal(customer.servedBy, incumbent);
+    env.advance(2, 0.05);
+    assert.equal(incumbent.post, env.evaluate('EXPRESS'));
+    assert.equal(incumbent.state, 'idle');
+    assert.equal(relief.state, 'waitProduct');
+    assert.equal(order.ops, null);
+    assert.equal(order.done, false);
+  }
+  assert.equal(env.game().stats.expressRunnerRequested, 2, 'Pending rotation and runner orders must not freeze Express contact');
+  assert.equal(env.game().stats.expressRunnerDelivered, 0, 'Zero Operations still leaves a genuine delivery backlog');
+  reinforce(env);
+  const handover = env.evaluate(`(() => {
+    let ticks = 0;
+    while (ticks++ < 1200) {
+      step(0.05);
+      if (relief.post === EXPRESS && !relief.path.length && incumbent.post !== EXPRESS &&
+          game.stats.expressRunnerDelivered === 2) return true;
+    }
+    return false;
+  })()`);
+  assert.equal(handover, true, 'A real runner releases the replacement to finish its sale and reach Express');
+  assert.equal(order.done, true);
+  assert.equal(env.context.sale.outcome, 'bought');
+  assert.equal(relief.nextSlot, undefined);
+  assert.equal(incumbent.nextSlot, undefined);
+  env.context.cashier = relief;
+  const next = startExpress(env, 'afterHandover', false);
+  finishExpress(env, 'afterHandover');
+  assert.equal(next.servedBy, relief, 'Subsequent customers use the colleague who has arrived at the counter');
+  assert.equal(next.outcome, 'bought');
+  assert.equal(env.game().stats.express, 3);
+});
+
+test('a ready Express replacement gets the queue before the departing incumbent can take another customer', () => {
+  const env = fixture();
+  env.evaluate(`window.incumbent = cashier;
+    window.relief = game.staff.find(person => person.role === 'specialist');
+    relief.hidden = false; relief.state = 'idle'; relief.path = [];
+    incumbent.nextSlot = relief.slot; relief.nextSlot = incumbent.slot;
+    applySlot(relief); moveAlong(relief, 100);
+    window.cashier = relief;`);
+  assert.equal(env.evaluate('canLeavePost(incumbent)'), true);
+  const customer = startExpress(env, 'readyReplacement', false);
+  assert.equal(customer.point, env.context.relief);
+  assert.equal(env.context.incumbent.customer, null);
+  env.evaluate('updateStaff(incumbent, 0.05)');
+  assert.notEqual(env.context.incumbent.post, env.evaluate('EXPRESS'));
+  finishExpress(env, 'readyReplacement');
+  assert.equal(customer.outcome, 'bought');
+  assert.equal(env.game().stats.express, 1);
+});
+
 test('an Operations reinforcement retrieves the queued accessory and completes Express exactly once', () => {
   const env = fixture();
   const customer = startExpress(env, 'waiting', true);

@@ -24,11 +24,11 @@ function productionEntries(env) {
 }
 
 function rendererModule() {
-  const calls = {construct: 0, dispose: 0, resize: 0, views: [], frames: []};
+  const calls = {construct: 0, dispose: 0, resize: 0, views: [], entities: [], frames: []};
   class BetaFloorRenderer {
     constructor(options) { calls.construct++; this.options = options; }
     resize() { calls.resize++; }
-    setView(view) { calls.views.push(view); }
+    setView(view, entity) { calls.views.push(view); calls.entities.push(entity); }
     render(snapshot, dt) { calls.frames.push({snapshot, dt}); }
     getStats() { return {frames: calls.frames.length}; }
     focus() {}
@@ -134,7 +134,7 @@ test('a saved 3D preference restores the production career and level progress th
   const fixture = rendererModule();
   const env = makeEnvironment({storage: storage('3d'), webgl2: true,
     importFloorRenderer: specifier => {
-      assert.equal(specifier, './renderer-3d.js?v=1.9.1');
+      assert.equal(specifier, './renderer-3d.js?v=1.9.3');
       return Promise.resolve(fixture.module);
     }});
   const before = productionEntries(env);
@@ -163,7 +163,7 @@ test('the real intro, floor, and camera controls switch one frozen career visit 
   assert.equal(fixture.calls.frames[0].snapshot.customers, before.entities[0]);
   assert.equal(fixture.calls.frames[0].snapshot.staff, before.entities[1]);
   const controls = env.context.document.querySelectorAll('[data-floor-view]');
-  assert.deepEqual(controls.map(button => button.dataset.floorView).sort(), ['express', 'genius', 'overview', 'product', 'top']);
+  assert.deepEqual(controls.map(button => button.dataset.floorView).sort(), ['express', 'genius', 'overview', 'player', 'product', 'top']);
   for (const view of ['top', 'product', 'genius', 'express']) {
     env.context.document.querySelector(`[data-floor-view="${view}"]`).click();
     for (const button of controls) {
@@ -172,7 +172,7 @@ test('the real intro, floor, and camera controls switch one frozen career visit 
     }
     assertVisit(env, before);
   }
-  assert.deepEqual(fixture.calls.views, ['overview', 'top', 'product', 'genius', 'express']);
+  assert.deepEqual(fixture.calls.views, ['player', 'top', 'product', 'genius', 'express']);
   assert.equal(env.storage.get(VIEW_KEY), '3d');
   assertVisit(env, before);
 
@@ -191,7 +191,18 @@ test('the real intro, floor, and camera controls switch one frozen career visit 
   await env.context.PLFloorViewUI.ready;
   assertMode(env, '3d');
   assert.equal(fixture.calls.construct, 1, 'A view switch reuses the loaded renderer');
-  assert.equal(fixture.calls.views.at(-1), 'express', 'The chosen camera survives a 2D round trip');
+  assert.equal(fixture.calls.views.at(-1), 'player', 'Returning to a 3D career follows the current player');
+  assert.equal(fixture.calls.entities.at(-1), before.player);
+  assertVisit(env, before);
+
+  env.context.document.querySelector('[data-floor-view="top"]').click();
+  env.context.document.querySelector('[data-specialist-action="focus"]').click();
+  assert.equal(fixture.calls.views.at(-1), 'player', 'Mostrami sul floor re-enables following after a manual camera');
+  assert.equal(fixture.calls.entities.at(-1), before.player);
+  assert.equal(env.game().selected, before.player);
+  const follow = env.context.document.querySelector('[data-floor-view="player"]');
+  assert.equal(follow.classList.contains('on'), true);
+  assert.equal(follow.getAttribute('aria-pressed'), 'true');
   assertVisit(env, before);
 });
 
@@ -279,4 +290,104 @@ test('denied preference writes do not prevent switching to 3D or erase the produ
   assertMode(env, '2d');
   assert.deepEqual(productionEntries(env), before);
   assert.equal(env.storage.has(VIEW_KEY), false);
+});
+
+test('a saved 3D career preview stays in overview until Resume, then follows the restored player even during briefing', async () => {
+  const fixture = rendererModule();
+  const saved = storage('3d');
+  saved.set(MODE_KEY, 'career');
+  const env = makeEnvironment({storage: saved, webgl2: true,
+    importFloorRenderer: () => Promise.resolve(fixture.module)});
+  await env.context.PLFloorViewUI.ready;
+  const follow = env.context.document.querySelector('[data-floor-view="player"]');
+  assert.equal(env.context.PLFloorView.player(), null);
+  assert.equal(follow.hidden, true);
+  assert.equal(fixture.calls.views.at(-1), 'overview');
+  assert.equal(saved.get(CAREER_KEY), JSON.stringify(savedCareer));
+
+  env.get('modeResumeCareer').click();
+  const player = env.mode().player();
+  assert.equal(env.game().briefing, true);
+  assert.equal(env.context.PLFloorView.snapshot().paused, true);
+  assert.equal(fixture.calls.views.at(-1), 'player', 'Following starts immediately, before the shift moves');
+  assert.equal(fixture.calls.entities.at(-1), player);
+  assert.equal(follow.hidden, false);
+  assert.equal(follow.classList.contains('on'), true);
+  assert.equal(follow.getAttribute('aria-pressed'), 'true');
+  assert.equal(player.stats.comp, savedCareer.profile.comp);
+  const checkpoint = saved.get(CAREER_KEY);
+  env.evaluate('render(0.1)');
+  assert.equal(fixture.calls.frames.at(-1).snapshot.player, player);
+  assert.equal(saved.get(CAREER_KEY), checkpoint, 'Camera rendering does not save career progress');
+});
+
+test('New Career begins following only after the final Lead tutorial action, not while the tutorial is open', async () => {
+  const fixture = rendererModule();
+  const env = makeEnvironment({storage: storage('3d'), webgl2: true,
+    importFloorRenderer: () => Promise.resolve(fixture.module)});
+  env.context.confirm = () => true;
+  await env.context.PLFloorViewUI.ready;
+  env.get('modeCareer').click();
+  assert.equal(env.context.PLCareerWelcome.active(), true);
+  assert.equal(env.context.PLFloorView.player(), null);
+  assert.equal(fixture.calls.views.includes('player'), false);
+  env.get('careerWelcomeNext').click();
+  env.get('careerWelcomeNext').click();
+  assert.equal(env.context.PLFloorView.player(), null);
+  env.get('careerWelcomeNext').click();
+  assert.equal(env.context.PLCareerWelcome.active(), false);
+  const player = env.mode().player();
+  assert.equal(player.stats.comp, 0);
+  assert.equal(env.game().day, 7);
+  assert.equal(fixture.calls.views.at(-1), 'player');
+  assert.equal(fixture.calls.entities.at(-1), player);
+});
+
+test('Resume during a pending 3D import follows the restored current player instead of the intro preview', async () => {
+  let resolveModule;
+  const pendingModule = new Promise(resolve => { resolveModule = resolve; });
+  const fixture = rendererModule();
+  const saved = storage('3d');
+  saved.set(MODE_KEY, 'career');
+  const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: () => pendingModule});
+  const preview = env.mode().player();
+  assert.equal(env.context.PLFloorView.player(), null);
+  env.get('modeResumeCareer').click();
+  const restored = env.mode().player();
+  assert.notEqual(restored, preview);
+  const checkpoint = saved.get(CAREER_KEY);
+  resolveModule(fixture.module);
+  assert.equal(await env.context.PLFloorViewUI.ready, true);
+  assertMode(env, '3d');
+  assert.equal(fixture.calls.views.at(-1), 'player');
+  assert.equal(fixture.calls.entities.at(-1), restored);
+  assert.equal(restored.stats.comp, savedCareer.profile.comp);
+  assert.equal(saved.get(CAREER_KEY), checkpoint);
+});
+
+test('a new career day follows its new player, while Observation hides following and returns to overview', async () => {
+  const fixture = rendererModule();
+  const env = makeEnvironment({storage: storage('3d'), webgl2: true,
+    importFloorRenderer: () => Promise.resolve(fixture.module)});
+  await env.context.PLFloorViewUI.ready;
+  env.get('modeResumeCareer').click();
+  const first = env.mode().player();
+  env.context.document.querySelector('[data-floor-view="express"]').click();
+  env.context.__sim.newDay(30);
+  const next = env.mode().player();
+  assert.notEqual(next, first);
+  assert.equal(fixture.calls.views.at(-1), 'player');
+  assert.equal(fixture.calls.entities.at(-1), next);
+  const checkpoint = env.storage.get(CAREER_KEY);
+  env.context.__sim.selectMode('observation');
+  const follow = env.context.document.querySelector('[data-floor-view="player"]');
+  assert.equal(fixture.calls.views.at(-1), 'overview');
+  assert.equal(env.context.PLFloorView.player(), null);
+  assert.equal(follow.hidden, true);
+  assert.equal(follow.disabled, true);
+  assert.equal(env.storage.get(CAREER_KEY), checkpoint);
+  env.get('modeResumeCareer').click();
+  assert.equal(fixture.calls.views.at(-1), 'player');
+  assert.equal(fixture.calls.entities.at(-1), env.mode().player());
+  assert.equal(follow.hidden, false);
 });

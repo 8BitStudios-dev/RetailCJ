@@ -35,11 +35,21 @@
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const demand = {}, staff = {};
     channels.forEach(channel => { demand[channel.id] = bound(source.demand && source.demand[channel.id], 0, 3, defaults.demand[channel.id]); });
-    let available = 80;
     tiers.forEach(tier => {
-      staff[tier.id] = Math.min(available, Math.floor(bound(source.staff && source.staff[tier.id], 0, 20, defaults.staff[tier.id])));
-      available -= staff[tier.id];
+      staff[tier.id] = Math.floor(bound(source.staff && source.staff[tier.id], 0, 20, defaults.staff[tier.id]));
     });
+    const total = Object.values(staff).reduce((sum, count) => sum + count, 0);
+    if (total > 80) {
+      // Keep each requested role represented, then share the remaining places
+      // proportionally. Role order must never silently remove Operations.
+      const active = tiers.filter(tier => staff[tier.id] > 0);
+      const places = 80 - active.length, requested = total - active.length;
+      const shares = active.map(tier => ({ id: tier.id, quota: (staff[tier.id] - 1) * places / requested }));
+      shares.forEach(share => { staff[share.id] = 1 + Math.floor(share.quota); });
+      const spare = 80 - Object.values(staff).reduce((sum, count) => sum + count, 0);
+      shares.sort((a, b) => (b.quota % 1) - (a.quota % 1));
+      for (let i = 0; i < spare; i++) staff[shares[i].id]++;
+    }
     return {
       day: Math.floor(bound(source.day, 1, 31, defaults.day)),
       seed: Math.floor(bound(source.seed, 1, 4294967295, defaults.seed)),

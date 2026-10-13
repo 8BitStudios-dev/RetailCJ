@@ -609,6 +609,7 @@ export class BetaFloorRenderer {
     if (this.disposed || !snapshot?.layout) return;
     if (!this.layout) this.buildWorld(snapshot.layout);
     this.reconcile(snapshot, realDt);
+    this.updatePlayerFollow(snapshot.player);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -629,14 +630,22 @@ export class BetaFloorRenderer {
     return Math.max(maxY * 2 + 2, maxX * 2 / aspect + 1.7) * 1.08;
   }
 
-  setView(view) {
-    this.view = ['overview', 'top', 'express', 'product', 'genius'].includes(view) ? view : 'overview';
-    this.focused = false;
+  setView(view, player = null) {
+    this.view = ['overview', 'top', 'express', 'product', 'genius', 'player'].includes(view) ? view : 'overview';
+    this.focused = this.view === 'player';
+    this.followPosition = null;
     this.viewRegion = null;
+    this.controls.enablePan = this.view !== 'player';
     this.camera.up.set(0, 1, 0);
     const stationKey = { express: 'express', product: 'pointProduct', genius: 'pointGenius' }[this.view];
     const station = this.layout?.[stationKey];
-    if (station) {
+    if (this.view === 'player') {
+      const visible = player && !player.hidden && !player.gone && Number.isFinite(player.x) && Number.isFinite(player.y);
+      const center = visible ? this.point(player.x, player.y, 0.35) : this.controls.target.clone();
+      this.controls.target.copy(center);
+      this.camera.position.copy(center).add(new THREE.Vector3(4.4, 7.1, 5.5));
+      if (visible) this.followPosition = center.clone();
+    } else if (station) {
       const spots = [station, station.talk, ...(station.line || []), this.view === 'product' ? this.layout.door : null].filter(Boolean);
       const minX = Math.min(...spots.map(spot => spot.x)), maxX = Math.max(...spots.map(spot => spot.x));
       const minY = Math.min(...spots.map(spot => spot.y)), maxY = Math.max(...spots.map(spot => spot.y));
@@ -660,6 +669,18 @@ export class BetaFloorRenderer {
     this.resize();
   }
 
+  updatePlayerFollow(player) {
+    if (this.view !== 'player') return;
+    if (!player || player.gone || !player.isPlayer) { this.setView('overview'); return; }
+    // A break hides the character; hold the last view until they return.
+    if (player.hidden || !Number.isFinite(player.x) || !Number.isFinite(player.y)) return;
+    const center = this.point(player.x, player.y, 0.35);
+    const delta = center.clone().sub(this.followPosition || this.controls.target);
+    this.camera.position.add(delta);
+    this.controls.target.add(delta);
+    this.followPosition = center;
+  }
+
   fitStationSpan(aspect) {
     const direction = this.camera.position.clone().sub(this.controls.target).normalize();
     const right = new THREE.Vector3().crossVectors(this.camera.up, direction).normalize();
@@ -675,6 +696,7 @@ export class BetaFloorRenderer {
 
   focus(entity) {
     if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) return;
+    if (entity.isPlayer) { this.setView('player', entity); return; }
     const center = this.point(entity.x + (entity.w || 0) / 2, entity.y + (entity.h || 0) / 2, 0.25);
     this.focused = true;
     const offset = this.camera.position.clone().sub(this.controls.target);
@@ -692,7 +714,8 @@ export class BetaFloorRenderer {
     const height = Math.max(1, this.canvas.clientHeight || this.canvas.parentElement?.clientHeight || 600);
     this.renderer.setSize(width, height, false);
     const aspect = width / height;
-    if (!this.focused) this.span = this.viewRegion ? this.fitStationSpan(aspect) : this.fitSpan();
+    if (this.view === 'player') this.span = Math.max(5.8, 6.8 / aspect);
+    else if (!this.focused) this.span = this.viewRegion ? this.fitStationSpan(aspect) : this.fitSpan();
     const span = this.span || 23;
     this.camera.left = -span * aspect / 2;
     this.camera.right = span * aspect / 2;

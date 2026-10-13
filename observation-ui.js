@@ -131,7 +131,13 @@
   }
   function updateDraftState() {
     if (!refs || !draft) return;
-    const changed = JSON.stringify(normalized(draft)) !== configKey;
+    const preview = normalized(draft);
+    const changed = JSON.stringify(preview) !== configKey;
+    const requestedStaff = tiers().reduce((sum, tier) => sum + Math.floor(Math.max(0, Math.min(20, Number(draft.staff[tier.id]) || 0))), 0);
+    const appliedStaff = Object.values(preview.staff).reduce((sum, count) => sum + count, 0);
+    setText(refs.staffPreview, requestedStaff > 80
+      ? 'Richieste ' + number(requestedStaff) + ' persone: saranno distribuite su ' + number(appliedStaff) + ' posti, riducendo proporzionalmente i ruoli. Operations previsti: ' + number(preview.staff.OP) + '.'
+      : 'Squadra prevista: ' + number(appliedStaff) + ' / 80 · Operations: ' + number(preview.staff.OP) + (preview.staff.OP === 0 ? '. Senza Operations gli ordini dal backstage restano in attesa.' : '.'));
     setText(refs.draftState, changed ? 'Modifiche da applicare · il floor attuale continua.' : 'Configurazione del floor attuale.');
     refs.draftState.classList.toggle('isChanged', changed);
   }
@@ -218,7 +224,9 @@
     const staff = fieldset(form, 'Personale del turno');
     const staffGrid = node('div', 'observationStaffGrid', staff);
     tiers().forEach(tier => fields.push(input(staffGrid, 'staff.' + tier.id, tier.label, { min: 0, max: 20, step: 1 })));
-    node('p', 'observationHint', staff, 'Il totale comprende i colleghi al Point; massimo 80 persone per turno. I ruoli mantengono le proprie competenze: aggiungere persone non equivale sempre ad aggiungere capacità di riparazione.');
+    node('p', 'observationHint', staff, 'Massimo 80 persone per turno, compresi i Point. Oltre il limite, la squadra viene ridotta proporzionalmente mantenendo almeno una persona per ogni ruolo richiesto.');
+    const staffPreview = node('p', 'observationHint', staff);
+    staffPreview.id = 'observationStaffPreview'; staffPreview.setAttribute('role', 'status');
 
     const conditions = fieldset(form, 'Condizioni della squadra');
     fields.push(input(conditions, 'formation', 'Disposizione del floor', { choices: [['accoglienza', 'Accoglienza'], ['tavoli', 'Presidio dei tavoli'], ['essenziale', 'Copertura essenziale']] }));
@@ -273,7 +281,7 @@
     root.replaceChildren.apply(root, tools.concat(remaining));
 
     refs = { root, state, stamp, cards, totals, channelRows, phases, secondaryMetrics,
-      referenceInfo, compareResults, capture, clear, fields, draftState, liveButtons, liveTier,
+      referenceInfo, compareResults, capture, clear, fields, draftState, staffPreview, liveButtons, liveTier,
       capacity, notice, presetSelect, presetDescription };
     return refs;
   }

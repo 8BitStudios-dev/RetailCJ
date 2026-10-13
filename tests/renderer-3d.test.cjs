@@ -45,7 +45,7 @@ async function fixture({width = 850, height = 600, world = false} = {}) {
     characterMaterial: new THREE.MeshLambertMaterial({vertexColors: true}),
     selectionRing: new THREE.Mesh(), tableSelection: new THREE.LineSegments(new THREE.BufferGeometry()),
     controls: {target: new THREE.Vector3(), update() {camera.lookAt(this.target); camera.updateMatrixWorld(true);}},
-    renderer: {setSize() {}, getPixelRatio: () => 1, info: {render: {calls: 0, triangles: 0}}},
+    renderer: {setSize() {}, render() {}, getPixelRatio: () => 1, info: {render: {calls: 0, triangles: 0}}},
   });
   view.baseGeometry = {
     box: view.keep(new THREE.BoxGeometry(1, 1, 1)), sphere: view.keep(new THREE.SphereGeometry(1, 10, 7)),
@@ -231,4 +231,112 @@ test('real Three.js raycasting selects string-ID staff, customers and tables aft
   const blank = view.project({x: 50, y: 50});
   view.selectAt(blank.x, blank.y);
   assert.equal(selected, null);
+});
+
+test('the personal camera follows frozen player snapshots while preserving orbit, zoom, pause and mobile framing', async () => {
+  const {THREE, view, layout} = await fixture();
+  const first = deepFreeze(staff({id: 'PLAYER', isPlayer: true, role: 'specialist', x: 900, y: 330, state: 'idle'}));
+  view.setView('player', first);
+  assert.equal(view.view, 'player');
+  assert.equal(view.focused, true);
+  assert.equal(view.controls.enablePan, false, 'Following permits rotation and zoom while retaining the player as its anchor');
+  const initial = view.point(first.x, first.y);
+  assert.ok(Math.abs(view.controls.target.x - initial.x) < 1e-9);
+  assert.ok(Math.abs(view.controls.target.z - initial.z) < 1e-9);
+
+  // Simulate an orbit/zoom adjustment independent of gameplay. A follow update
+  // must translate the existing camera, not reset the player's chosen angle.
+  const offset = new THREE.Vector3(-5, 6, 4);
+  view.camera.position.copy(view.controls.target).add(offset);
+  view.camera.zoom = 1.7;
+  view.camera.updateProjectionMatrix();
+  view.controls.update();
+  const moved = deepFreeze({...first, x: 1150, y: 900, path: [{x: 1250, y: 950}], walk: 1});
+  const input = deepFreeze(snapshot({layout, staff: [moved], player: moved}));
+  const before = JSON.stringify(input);
+  view.render(input, 0.05);
+  const center = view.point(moved.x, moved.y);
+  assert.ok(Math.abs(view.controls.target.x - center.x) < 1e-9);
+  assert.ok(Math.abs(view.controls.target.z - center.z) < 1e-9);
+  assert.ok(view.camera.position.clone().sub(view.controls.target).distanceTo(offset) < 1e-9);
+  assert.equal(view.camera.zoom, 1.7);
+  assert.equal(JSON.stringify(input), before, 'The camera cannot move or mutate the simulation player');
+
+  const stationaryTarget = view.controls.target.clone();
+  const stationaryPosition = view.camera.position.clone();
+  const paused = deepFreeze({...input, paused: true});
+  for (let frame = 0; frame < 6; frame++) view.render(paused, 0.1);
+  assert.ok(view.controls.target.equals(stationaryTarget));
+  assert.ok(view.camera.position.equals(stationaryPosition));
+  assert.equal(view.camera.zoom, 1.7);
+  for (const [width, height] of [[360, 700], [1280, 480], [390, 600], [850, 600]]) {
+    view.canvas.clientWidth = width; view.canvas.clientHeight = height;
+    view.resize();
+    assert.equal(view.view, 'player');
+    assert.ok(view.controls.target.equals(stationaryTarget));
+    assert.ok(view.camera.position.clone().sub(view.controls.target).distanceTo(offset) < 1e-9);
+    assert.equal(view.camera.zoom, 1.7);
+    view.scene.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(view.actors.get('s:PLAYER').body);
+    for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y])
+      for (const z of [bounds.min.z, bounds.max.z]) {
+        const screen = new THREE.Vector3(x, y, z).project(view.camera);
+        assert.ok(Math.abs(screen.x) < 1 && Math.abs(screen.y) < 1, `The complete player must fit ${width}×${height}`);
+      }
+  }
+});
+
+test('following holds a hidden player, resolves a new entity with the same ID, and stops for manual cameras or absent players', async () => {
+  const {view, layout} = await fixture();
+  const first = deepFreeze(staff({id: 'PLAYER', isPlayer: true, role: 'specialist', x: 900, y: 330, state: 'idle'}));
+  view.setView('player', first);
+  view.render(deepFreeze(snapshot({layout, staff: [first], player: first})), 0.05);
+  const heldTarget = view.controls.target.clone();
+  const heldCamera = view.camera.position.clone();
+  const hidden = deepFreeze({...first, x: -300, y: 2200, hidden: true, state: 'onBreak'});
+  view.render(deepFreeze(snapshot({layout, staff: [hidden], player: hidden})), 0.05);
+  assert.equal(view.view, 'player');
+  assert.ok(view.controls.target.equals(heldTarget), 'A hidden player must not drag the camera outside the floor');
+  assert.ok(view.camera.position.equals(heldCamera));
+
+  const nextDay = deepFreeze({...first, x: 260, y: 1650, state: 'idle'});
+  assert.notEqual(nextDay, first);
+  view.render(deepFreeze(snapshot({layout, staff: [nextDay], player: nextDay})), 0.05);
+  const currentPoint = view.point(nextDay.x, nextDay.y);
+  assert.ok(Math.abs(view.controls.target.x - currentPoint.x) < 1e-9);
+  assert.ok(Math.abs(view.controls.target.z - currentPoint.z) < 1e-9);
+  assert.equal(view.actors.get('s:PLAYER').entity, nextDay, 'Both geometry and follow resolve the current entity');
+
+  view.setView('express');
+  const expressTarget = view.controls.target.clone();
+  const expressCamera = view.camera.position.clone();
+  const otherPosition = deepFreeze({...nextDay, x: 1200, y: 170});
+  view.render(deepFreeze(snapshot({layout, staff: [otherPosition], player: otherPosition})), 0.05);
+  assert.equal(view.view, 'express');
+  assert.ok(view.controls.target.equals(expressTarget));
+  assert.ok(view.camera.position.equals(expressCamera), 'A manual camera must stop automatic following');
+  assert.equal(view.controls.enablePan, true);
+
+  view.setView('player', otherPosition);
+  view.render(deepFreeze(snapshot({layout, staff: [], player: null})), 0.05);
+  assert.equal(view.view, 'overview', 'Removing the eligible player cannot keep stale follow state');
+  assert.equal(view.focused, false);
+  assert.equal(view.controls.enablePan, true);
+});
+
+test('the first 3D world build keeps the personal view and anchors it to the first current player snapshot', async () => {
+  const {view, layout} = await fixture();
+  const player = deepFreeze(staff({id: 'PLAYER', isPlayer: true, role: 'specialist', x: 700, y: 410, state: 'idle'}));
+  view.layout = null;
+  view.setView('player', player);
+  const frame = deepFreeze(snapshot({layout, staff: [player], player}));
+  const before = JSON.stringify(frame);
+  view.render(frame, 0);
+  assert.equal(view.view, 'player');
+  assert.equal(view.layout, layout);
+  assert.equal(view.actors.get('s:PLAYER').entity, player);
+  const anchor = view.point(player.x, player.y);
+  assert.ok(Math.abs(view.controls.target.x - anchor.x) < 1e-9);
+  assert.ok(Math.abs(view.controls.target.z - anchor.z) < 1e-9);
+  assert.equal(JSON.stringify(frame), before);
 });

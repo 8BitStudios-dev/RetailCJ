@@ -66,12 +66,12 @@ function assertVisitUnchanged(env, before) {
 }
 
 function stubRenderer() {
-  const calls = {resize: 0, frames: [], views: [], focus: []};
+  const calls = {resize: 0, frames: [], views: [], entities: [], focus: []};
   return {calls,
     resize() { calls.resize++; },
     render(snapshot, dt) { calls.frames.push({snapshot, dt}); },
     getStats() { return {frames: calls.frames.length}; },
-    setView(view) { calls.views.push(view); },
+    setView(view, entity) { calls.views.push(view); calls.entities.push(entity); },
     focus(person) { calls.focus.push(person); },
   };
 }
@@ -92,6 +92,7 @@ test('switching 2D and 3D views during a career visit preserves time, paths, ass
   assert.equal(frame.snapshot.customers, before.customers);
   assert.equal(frame.snapshot.staff, before.staff);
   assert.equal(frame.snapshot.time, before.game.time);
+  assert.equal(frame.snapshot.player, before.player, 'A renderer receives the current player without changing the visit');
   assert.equal(frame.dt, 0.1);
   assertVisitUnchanged(env, before);
 
@@ -142,5 +143,50 @@ test('3D staff, customer, and table selection opens existing information without
 
   api.select(null);
   assert.equal(env.game().selected, null);
+  assertVisitUnchanged(env, before);
+});
+
+test('the camera exposes only a started career player and resolves a new day, observation and levels safely', () => {
+  const saved = {version: 2, day: 19, phase: 'start', shiftHours: 4,
+    profile: {mot: 63, stress: 21, comp: 44, tier: 'S'}};
+  const env = makeEnvironment({storage: new Map([['plgame.career.v1', JSON.stringify(saved)], ['plgame.mode', 'career']])});
+  const api = env.context.PLFloorView;
+  assert.ok(env.mode().player().isPlayer, 'The intro may show a preview player');
+  assert.equal(api.player(), null, 'A preview is not an active career');
+  assert.equal(api.snapshot().player, null);
+
+  env.get('modeResumeCareer').click();
+  const first = env.mode().player();
+  assert.equal(api.player(), first);
+  assert.equal(api.snapshot().player, first);
+  assert.equal(first.stats.comp, saved.profile.comp);
+  env.context.__sim.newDay(20);
+  const second = env.mode().player();
+  assert.notEqual(second, first, 'The next shift creates a new entity');
+  assert.equal(second.id, first.id);
+  assert.equal(api.player(), second, 'Following cannot cache yesterday’s player entity');
+  assert.equal(api.snapshot().player, second);
+  env.evaluate('game.level = {name: "test level"}');
+  assert.equal(api.player(), null);
+  assert.equal(api.snapshot().player, null);
+  env.evaluate('game.level = null');
+  assert.equal(api.player(), second);
+  env.context.__sim.selectMode('observation');
+  assert.equal(api.player(), null);
+  assert.equal(api.snapshot().player, null);
+});
+
+test('selecting the personal camera passes the exact current player while preserving a frozen active visit', () => {
+  const env = activeVisit();
+  const before = capture(env);
+  const api = env.context.PLFloorView;
+  const renderer = stubRenderer();
+  api.attach(renderer);
+  api.setMode(true);
+  api.setView('player');
+  assert.equal(renderer.calls.views.at(-1), 'player');
+  assert.equal(renderer.calls.entities.at(-1), before.player);
+  env.evaluate('render(0.1)');
+  assert.equal(renderer.calls.frames.at(-1).snapshot.player, before.player);
   assertVisitUnchanged(env, before);
 });

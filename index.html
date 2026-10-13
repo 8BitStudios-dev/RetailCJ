@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="1.9.1">
+<meta name="application-version" content="1.9.3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/piazza-liberty-icon-32.png?v=1.9.3">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/piazza-liberty-icon.png?v=1.9.3">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/piazza-liberty-icon-180.png?v=1.9.3">
 <title>RetailCJ — Floor 2D e 3D</title>
 <style>
   :root {
@@ -160,12 +162,12 @@
     .side { width: 100%; }
   }
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=1.9.1">
-<link rel="stylesheet" href="game-modes.css?v=1.9.1">
-<link rel="stylesheet" href="app-update.css?v=1.9.1">
-<link rel="stylesheet" href="career-welcome.css?v=1.9.1">
-<link rel="stylesheet" href="observation-ui.css?v=1.9.1">
-<link rel="stylesheet" href="view-mode.css?v=1.9.1">
+<link rel="stylesheet" href="specialist-ui.css?v=1.9.3">
+<link rel="stylesheet" href="game-modes.css?v=1.9.3">
+<link rel="stylesheet" href="app-update.css?v=1.9.3">
+<link rel="stylesheet" href="career-welcome.css?v=1.9.3">
+<link rel="stylesheet" href="observation-ui.css?v=1.9.3">
+<link rel="stylesheet" href="view-mode.css?v=1.9.3">
 </head>
 <body>
 <div class="app">
@@ -191,7 +193,7 @@
     <div class="goalRow" id="goalRow" hidden></div>
   </div>
   <div class="stage">
-    <div id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D"><div role="group" aria-label="Inquadrature del floor"><button type="button" data-floor-view="overview" class="on">Panoramica</button><button type="button" data-floor-view="top">Dall’alto</button><button type="button" data-floor-view="express">Express</button><button type="button" data-floor-view="product">Point Product</button><button type="button" data-floor-view="genius">Point Genius Bar</button></div><span>Trascina per ruotare · due dita o rotella per zoomare</span></div>
+    <div id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D"><div role="group" aria-label="Inquadrature del floor"><button type="button" data-floor-view="player" hidden>Seguimi</button><button type="button" data-floor-view="overview" class="on">Panoramica</button><button type="button" data-floor-view="top">Dall’alto</button><button type="button" data-floor-view="express">Express</button><button type="button" data-floor-view="product">Point Product</button><button type="button" data-floor-view="genius">Point Genius Bar</button></div><span>Trascina per ruotare · due dita o rotella per zoomare</span></div>
     <div class="scroller" id="scroller"><canvas id="game" width="576" height="760" aria-label="Pianta di Piazza Liberty: seleziona una persona o un tavolo"></canvas><canvas id="floor3d" hidden tabindex="0" aria-label="Floor 3D: trascina per ruotare, usa lo zoom e seleziona una persona o un tavolo"></canvas><div id="rendererBadge" class="floorRendererBadge" hidden><span aria-hidden="true">●</span> <span id="rendererLabel">Floor in 3D</span></div></div>
     <div class="tip" id="tip" hidden><div class="tipText"></div><div class="acts"></div></div>
     <div class="overlay show" id="intro">
@@ -330,19 +332,19 @@
   </div>
 </div>
 
-<script src="graphics-interior.js?v=1.9.1"></script>
-<script src="graphics-walls.js?v=1.9.1"></script>
-<script src="graphics-people.js?v=1.9.1"></script>
-<script src="career-progression.js?v=1.9.1"></script>
-<script src="career-save.js?v=1.9.1"></script>
-<script src="specialist-mode.js?v=1.9.1"></script>
-<script src="specialist-ui.js?v=1.9.1"></script>
-<script src="game-modes.js?v=1.9.1"></script>
-<script src="career-welcome.js?v=1.9.1"></script>
-<script src="app-update.js?v=1.9.1"></script>
-<script src="observation-lab.js?v=1.9.1"></script>
-<script src="observation-engine.js?v=1.9.1"></script>
-<script src="observation-ui.js?v=1.9.1"></script>
+<script src="graphics-interior.js?v=1.9.3"></script>
+<script src="graphics-walls.js?v=1.9.3"></script>
+<script src="graphics-people.js?v=1.9.3"></script>
+<script src="career-progression.js?v=1.9.3"></script>
+<script src="career-save.js?v=1.9.3"></script>
+<script src="specialist-mode.js?v=1.9.3"></script>
+<script src="specialist-ui.js?v=1.9.3"></script>
+<script src="game-modes.js?v=1.9.3"></script>
+<script src="career-welcome.js?v=1.9.3"></script>
+<script src="app-update.js?v=1.9.3"></script>
+<script src="observation-lab.js?v=1.9.3"></script>
+<script src="observation-engine.js?v=1.9.3"></script>
+<script src="observation-ui.js?v=1.9.3"></script>
 <script>
 'use strict';
 
@@ -714,6 +716,7 @@ function newDay(dayOfMonth, opts = {}) {
   if (STRATEGY_ON && opts.formation && opts.formation !== game.formation) changeFormation(opts.formation, 'open');
   if (careerStarted) saveCareerCheckpoint('start');
   showBrief();
+  if (window.PLFloorViewUI) window.PLFloorViewUI.syncCareerCamera();
 }
 
 // I ruoli ruotano ogni 1–2 ore. In vendita chi era ai tavoli va a Point, Express o accessori e viceversa;
@@ -1167,6 +1170,7 @@ function startDay(opts = {}) {
   if (SPECIALIST_ON && !careerStarted) {
     careerStarted = true;
     saveCareerCheckpoint('start');
+    if (window.PLFloorViewUI) window.PLFloorViewUI.syncCareerCamera();
   }
   game.focus = { op: opts.op || 0, sales: opts.sales || 0, cel: opts.cel || 0 };   // i gettoni restano solo per le simulazioni di prova
   game.dd = opts.dd ? { target: DD_TOPICS.find(x => x.key === opts.dd.topic).targets[0][0], format: 'breve', who: 'tutti', coach: '', ...opts.dd } : game.dd || null;
@@ -1382,7 +1386,10 @@ const needIcon = c => c.kind === 'buy' ? c.product : c.kind === 'genius' ? 'wren
 function updateLine(line, post, also = []) {
   // durante un cambio ruoli il posto può restare scoperto per poco, o avere due persone: si prende chi è pronto
   const posts = [post, ...also];
-  const point = game.staff.find(s => posts.includes(s.post) && s.state === 'idle' && s.path.length === 0 && s.nextSlot === undefined);
+  // Keep serving the current post while its replacement is still occupied.
+  // Once the handoff is ready, leave the next customer for the new colleague.
+  const point = game.staff.find(s => posts.includes(s.post) && s.state === 'idle' && s.path.length === 0 &&
+    (s.nextSlot === undefined || !canLeavePost(s)));
   line.forEach((c, i) => {
     if (c.lineIdx === i) return;
     c.lineIdx = i;
@@ -3193,7 +3200,7 @@ let playerMode = SPECIALIST_ON ? createPlayerMode() : null;
 window.PLSpecialistUI.bind({
   next: () => { careerPromotionNotice = ''; if (playerMode) playerMode.takeNext(); updatePanel(); },
   pause: () => { careerPromotionNotice = ''; if (playerMode) playerMode.requestBreak(); updatePanel(); },
-  focus: () => { if (playerMode) { playerMode.focus(); if (floorRenderer && floorUse3D) floorRenderer.focus(playerMode.player()); } updatePanel(); },
+  focus: () => { if (playerMode) { playerMode.focus(); if (window.PLFloorViewUI) window.PLFloorViewUI.followPlayer(); } updatePanel(); },
   promote: promoteCareer,
 });
 function saveCareerCheckpoint(phase) {
@@ -3330,11 +3337,12 @@ window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer,
   observation, get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
 // Both views read the same floor; a camera choice never changes a visit or a save.
 window.PLFloorView = {
+  player: () => careerStarted && SPECIALIST_ON && !game.level && playerMode ? playerMode.player() : null,
   snapshot: () => ({
     layout: {width: WORLD_W, height: WORLD_H, tables: TABLES, support: SUPPORT, walls: WALLS, trees: TREES,
       stools: STOOLS, screen: SCREEN, door: DOOR, backDoor: BACK_DOOR, express: EXPRESS,
       pointProduct: POINT_IN, pointGenius: POINT_GB},
-    customers: game.customers, staff: game.staff, selected: game.selected, time: game.time, speed: game.speed,
+    customers: game.customers, staff: game.staff, player: window.PLFloorView.player(), selected: game.selected, time: game.time, speed: game.speed,
     paused: game.speed === 0 || game.briefing || game.over || game.planning || modePicking || intro.on,
   }),
   select: hit => {
@@ -3354,12 +3362,12 @@ window.PLFloorView = {
     if (floorUse3D) floorRenderer.resize();
     return floorUse3D;
   },
-  setView: view => { if (floorRenderer) floorRenderer.setView(view); },
+  setView: view => { if (floorRenderer) floorRenderer.setView(view, window.PLFloorView.player()); },
   stats: () => floorRenderer ? floorRenderer.getStats() : null,
   fallback: () => { window.PLFloorView.setMode(false); if (window.PLFloorViewUI) window.PLFloorViewUI.fallback(); },
   get active() { return floorUse3D; },
 };
 </script>
-<script src="view-mode.js?v=1.9.1"></script>
+<script src="view-mode.js?v=1.9.3"></script>
 </body>
 </html>

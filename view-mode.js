@@ -24,8 +24,19 @@
     statuses.forEach(status => { status.textContent = text; });
   }
 
+  function careerPlayer() {
+    return typeof api.player === 'function' ? api.player() : null;
+  }
+
+  function cameraMessage() {
+    message(currentView === 'player' && careerPlayer()
+      ? 'Vista 3D attiva: la camera segue il tuo personaggio. Puoi ruotare e zoomare mentre ti muovi.'
+      : 'Vista 3D attiva. Seleziona una persona o un tavolo per seguirne la visita.');
+  }
+
   function update() {
     const active = Boolean(api.active);
+    const eligiblePlayer = Boolean(careerPlayer());
     buttons.forEach(button => {
       const selected = button.dataset.floorMode === (active ? '3d' : '2d');
       button.classList.toggle('on', selected);
@@ -33,10 +44,12 @@
       button.disabled = button.dataset.floorMode === '3d' && (unavailable || Boolean(pending));
     });
     cameras.forEach(button => {
+      const playerButton = button.dataset.floorView === 'player';
       const selected = active && button.dataset.floorView === currentView;
       button.classList.toggle('on', selected);
       button.setAttribute('aria-pressed', String(selected));
-      button.disabled = !active;
+      if (playerButton) button.hidden = !eligiblePlayer;
+      button.disabled = !active || (playerButton && !eligiblePlayer);
     });
     if (cameraControls) cameraControls.hidden = !active;
     if (label) label.textContent = active ? 'Floor in 3D · BETA' : 'Pianta 2D';
@@ -66,13 +79,36 @@
 
   function activate() {
     if (desiredMode !== '3d' || !renderer || unavailable) return false;
+    currentView = careerPlayer() ? 'player' : currentView === 'player' ? 'overview' : currentView;
     api.setMode(true);
     update();
     if (!api.active || !renderer) return false;
     api.setView(currentView);
     renderer.resize();
-    message('Vista 3D attiva. Seleziona una persona o un tavolo per seguirne la visita.');
+    cameraMessage();
     return Boolean(api.active);
+  }
+
+  function syncCareerCamera() {
+    currentView = careerPlayer() ? 'player' : 'overview';
+    try {
+      if (api.active && renderer) api.setView(currentView);
+      update();
+      if (api.active) cameraMessage();
+    } catch (_) { fallback(); }
+    return currentView === 'player';
+  }
+
+  function followPlayer() {
+    if (!careerPlayer()) { update(); return false; }
+    currentView = 'player';
+    try {
+      if (api.active && renderer) api.setView(currentView);
+      update();
+      if (api.active) cameraMessage();
+      else if (!pending && !unavailable) message('Vista 2D attiva. Passa al 3D per seguire il tuo personaggio.');
+    } catch (_) { fallback(); return false; }
+    return true;
   }
 
   function selectMode(mode) {
@@ -93,7 +129,7 @@
     }
     if (pending) return pending;
     message('Caricamento della vista 3D… La giornata continua; puoi restare in 2D.');
-    pending = import('./renderer-3d.js?v=1.9.1').then(({ BetaFloorRenderer }) => {
+    pending = import('./renderer-3d.js?v=1.9.3').then(({ BetaFloorRenderer }) => {
       renderer = new BetaFloorRenderer({ canvas, onSelect: api.select });
       api.attach(renderer);
       if (desiredMode === '3d') return activate();
@@ -110,14 +146,17 @@
   root.PLFloorViewUI = {
     selectMode,
     fallback,
+    syncCareerCamera,
+    followPlayer,
     get ready() { return pending || Promise.resolve(Boolean(api.active)); },
   };
 
   buttons.forEach(button => button.addEventListener('click', () => selectMode(button.dataset.floorMode)));
   cameras.forEach(button => button.addEventListener('click', () => {
     if (!api.active || !renderer) return;
+    if (button.dataset.floorView === 'player') { followPlayer(); return; }
     currentView = button.dataset.floorView;
-    try { api.setView(currentView); update(); } catch (_) { fallback(); }
+    try { api.setView(currentView); update(); cameraMessage(); } catch (_) { fallback(); }
   }));
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault();

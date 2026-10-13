@@ -203,6 +203,55 @@ test('replay restores the full floor, demand and initial team after the simulati
   assert.equal(env.game().briefing, false);
 });
 
+test('an over-cap roster preserves requested roles and a maximum roster gives eight people to each service', () => {
+  const maximum = Object.fromEntries(observation.tiers.map(tier => [tier.id, 20]));
+  const normalized = observation.normalizeConfig({staff: maximum});
+  assert.deepEqual(normalized.staff, Object.fromEntries(observation.tiers.map(tier => [tier.id, 8])));
+  assert.equal(Object.values(normalized.staff).reduce((sum, count) => sum + count, 0), 80);
+  assert.equal(normalized.staff.OP, 8, 'Maximum floor staffing must not silently remove every runner');
+  assert.deepEqual(observation.normalizeConfig(normalized), normalized, 'The allocated roster survives replay and save normalization');
+
+  const requested = {S: 20, E: 20, P: 20, TS: 20, TE: 20, G: 1, C: 0, CP: 0, OP: 1, L: 1};
+  const varied = observation.normalizeConfig({staff: requested});
+  assert.equal(Object.values(varied.staff).reduce((sum, count) => sum + count, 0), 80);
+  for (const [tier, count] of Object.entries(requested)) {
+    assert.ok(Number.isInteger(varied.staff[tier]));
+    assert.ok(varied.staff[tier] <= count, 'Allocation cannot add an unrequested colleague');
+    if (count > 0) assert.ok(varied.staff[tier] >= 1, 'A requested service keeps at least one colleague: ' + tier);
+    else assert.equal(varied.staff[tier], 0, 'An absent role stays absent: ' + tier);
+  }
+  assert.deepEqual(observation.normalizeConfig(varied), varied);
+  assert.deepEqual(observation.normalizeConfig(observation.defaults), observation.defaults, 'A team below the limit retains its exact requested staffing');
+});
+
+test('maximum staffing has a visible 200-to-80 preview and applies the promised Operations coverage', () => {
+  const env = observe();
+  const initial = plain(env.context.__sim.observation.view.config.staff);
+  for (const tier of observation.tiers) {
+    const field = env.get('observation-staff-' + tier.id);
+    field.value = '20'; field.dispatch('input');
+  }
+  env.context.PLObservationUI.render(env.context.__sim.observation.view);
+  const preview = env.get('observationStaffPreview');
+  assert.ok(preview, 'The requested and allocated rosters must be visible before submission');
+  assert.match(preview.textContent, /200/);
+  assert.match(preview.textContent, /80/);
+  assert.match(preview.textContent, /Operations[^\d]*8/);
+  for (const tier of observation.tiers) {
+    assert.equal(Number(env.get('observation-staff-' + tier.id).value), 20, 'Simulation refreshes preserve the unapplied request');
+  }
+  assert.deepEqual(plain(env.context.__sim.observation.view.config.staff), initial, 'Preview does not alter the active floor');
+  env.get('observationApply').parentElement.dispatch('submit');
+  const applied = plain(env.context.__sim.observation.view.config.staff);
+  assert.equal(env.game().staff.length, 80);
+  for (const tier of observation.tiers) {
+    assert.equal(applied[tier.id], 8);
+    assert.equal(env.game().staff.filter(person => person.tier === tier.id).length, 8);
+    assert.equal(Number(env.get('observation-staff-' + tier.id).value), 8, 'Fields show the roster actually applied');
+  }
+  assert.equal(env.game().staff.filter(person => person.role === 'ops').length, 8);
+});
+
 test('applying additional staffing leaves the scenario arrival and appointment samples unchanged', () => {
   const env = observe();
   const original = demand(env);
