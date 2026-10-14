@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
 
-function activeVisit() {
-  const env = makeEnvironment({specialistMode: true});
+function activeVisit(options = {}) {
+  const env = makeEnvironment({specialistMode: true, ...options});
   env.evaluate(`
     window.__sim.selectMode('career'); startDay();
     game.arrivals = []; game.sessions = []; game.customers = [];
@@ -188,4 +188,47 @@ test('selecting the personal camera passes the exact current player while preser
   env.evaluate('render(0.1)');
   assert.equal(renderer.calls.frames.at(-1).snapshot.player, before.player);
   assertVisitUnchanged(env, before);
+});
+
+test('expanding and reducing the floor resizes one renderer without changing the active camera or a frozen visit', async () => {
+  const renderer = stubRenderer();
+  const camera = Object.freeze({zoom: 1.7, azimuth: 0.35, following: true});
+  renderer.camera = camera;
+  class FloorRenderer { constructor() { return renderer; } }
+  const env = activeVisit({webgl2: true, importFloorRenderer: () => Promise.resolve({FloorRenderer})});
+  assert.equal(await env.context.PLFloorViewUI.ready, true);
+  const before = capture(env);
+  const button = env.get('floorSizeToggle');
+  const viewport = env.get('floorViewport');
+  const api = env.context.PLFloorView;
+  assert.equal(button.disabled, false);
+  assert.equal(button.getAttribute('aria-expanded'), 'false');
+  assert.equal(viewport.classList.contains('floorExpanded'), false);
+  api.select({isStaff: false, id: before.customer.id});
+
+  for (const view of ['express', 'player']) {
+    env.context.document.querySelector('[data-floor-view="' + view + '"]').click();
+    const views = [...renderer.calls.views];
+    const entities = [...renderer.calls.entities];
+    const focused = [...renderer.calls.focus];
+    for (const expanded of [true, false]) {
+      const resized = renderer.calls.resize;
+      button.click();
+      assert.equal(viewport.classList.contains('floorExpanded'), expanded);
+      assert.equal(env.context.document.body.classList.contains('floorIsExpanded'), expanded);
+      assert.equal(button.getAttribute('aria-expanded'), String(expanded));
+      assert.equal(button.textContent, expanded ? 'Riduci' : 'Ingrandisci');
+      assert.equal(renderer.calls.resize, resized + 1);
+      assert.deepEqual(renderer.calls.views, views, 'Resizing does not reapply or reset the chosen camera');
+      assert.deepEqual(renderer.calls.entities, entities);
+      assert.deepEqual(renderer.calls.focus, focused);
+      assert.equal(env.context.document.querySelector('[data-floor-view="' + view + '"]').getAttribute('aria-pressed'), 'true');
+      assert.equal(renderer.camera, camera);
+      assert.equal(renderer.camera.zoom, 1.7);
+      assert.equal(env.game().selected, before.customer);
+      env.evaluate('render(0.1)');
+      assert.equal(renderer.calls.frames.at(-1).snapshot.player, before.player);
+      assertVisitUnchanged(env, before);
+    }
+  }
 });

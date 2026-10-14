@@ -117,7 +117,7 @@ test('3D boots automatically and ignores an old 2D preference without changing p
     const saved = storage(view);
     const entries = [...saved];
     const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: specifier => {
-      imports++; assert.equal(specifier, './renderer-3d.js?v=2.0.0');
+      imports++; assert.equal(specifier, './renderer-3d.js?v=2.0.1');
       return Promise.resolve(fixture.module);
     }});
     assert.equal(await env.context.PLFloorViewUI.ready, true);
@@ -136,7 +136,7 @@ test('3D boots automatically and ignores an old 2D preference without changing p
   }
 });
 
-test('the page contains one 3D floor with commands above it and no retired rendering or update assets', () => {
+test('the page keeps game commands above the floor and its compact camera bar directly below the canvas', () => {
   const env = makeEnvironment();
   const doc = env.context.document;
   assert.equal(doc.querySelectorAll('canvas').length, 1);
@@ -151,7 +151,7 @@ test('the page contains one 3D floor with commands above it and no retired rende
   const assets = [...env.html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi)]
     .map(match => match[1]).filter(url => !/^(?:https?:)?\/\//.test(url));
   for (const asset of assets) {
-    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.0.0', asset);
+    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.0.1', asset);
     assert.equal(fs.existsSync(path.join(gameDirectory, asset.split('?')[0])), true, asset);
   }
   const floorPosition = env.html.indexOf('id="floor3d"');
@@ -159,6 +159,14 @@ test('the page contains one 3D floor with commands above it and no retired rende
     assert.ok(env.get(id), id);
     assert.ok(env.html.indexOf('id="' + id + '"') < floorPosition, id + ' precedes the floor');
   }
+  const viewport = env.get('floorViewport');
+  assert.ok(viewport);
+  assert.equal(env.get('floor3d').closest('#floorViewport'), viewport);
+  assert.equal(env.get('cameraControls').closest('#floorViewport'), viewport);
+  assert.equal(env.get('floorSizeToggle').closest('#cameraControls'), env.get('cameraControls'));
+  assert.ok(env.html.indexOf('id="cameraControls"') > floorPosition, 'Cameras are below the physical canvas');
+  assert.equal(env.get('playerPanel').closest('#interactionPane'), env.get('interactionPane'),
+    'The active interaction belongs to the main workspace beside the compact floor');
   env.context.__sim.selectMode('career');
   for (const action of ['next', 'focus', 'pause']) {
     const button = doc.querySelector('[data-specialist-action="' + action + '"]');
@@ -174,6 +182,11 @@ test('without WebGL the floor explains the failure and real animation frames can
   assertReady(env, false);
   assert.match(env.get('floorStatus').textContent, /WebGL|browser|grafica/i);
   assert.equal(imports, 0);
+  const size = env.get('floorSizeToggle');
+  assert.equal(size.disabled, true);
+  size.click();
+  assert.equal(env.get('floorViewport').classList.contains('floorExpanded'), false);
+  assert.equal(size.getAttribute('aria-expanded'), 'false');
   env.get('modeResumeCareer').click();
   env.evaluate('startDay(); game.time = OPEN');
   const time = env.game().time;
@@ -289,6 +302,9 @@ test('career cameras follow the current player, respect manual focus, and reset 
   const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: () => Promise.resolve(fixture.module)});
   await env.context.PLFloorViewUI.ready;
   const follow = env.context.document.querySelector('[data-floor-view="player"]');
+  const viewport = env.get('floorViewport');
+  const size = env.get('floorSizeToggle');
+  assert.equal(env.context.document.body.classList.contains('careerLayout'), false);
   assert.equal(env.context.PLFloorView.player(), null);
   assert.equal(follow.hidden, true);
   assert.equal(fixture.calls.views.at(-1), 'overview');
@@ -298,22 +314,35 @@ test('career cameras follow the current player, respect manual focus, and reset 
   assert.equal(fixture.calls.views.at(-1), 'player');
   assert.equal(fixture.calls.entities.at(-1), first);
   assert.equal(follow.hidden, false);
+  assert.equal(env.context.document.body.classList.contains('careerLayout'), true);
+  assert.equal(viewport.classList.contains('floorExpanded'), false);
+  size.click();
+  assert.equal(viewport.classList.contains('floorExpanded'), true);
   env.context.document.querySelector('[data-floor-view="express"]').click();
   assert.equal(fixture.calls.views.at(-1), 'express');
   env.context.document.querySelector('[data-specialist-action="focus"]').click();
   assert.equal(fixture.calls.views.at(-1), 'player');
   assert.equal(env.game().selected, first);
+  assert.equal(viewport.classList.contains('floorExpanded'), true, 'Focusing the player preserves the chosen floor size');
   env.context.__sim.newDay(30);
   const next = env.mode().player();
   assert.notEqual(next, first);
   assert.equal(fixture.calls.views.at(-1), 'player');
   assert.equal(fixture.calls.entities.at(-1), next);
+  assert.equal(viewport.classList.contains('floorExpanded'), false, 'A new shift starts with the compact career layout');
+  assert.equal(size.getAttribute('aria-expanded'), 'false');
+  size.click();
+  assert.equal(viewport.classList.contains('floorExpanded'), true);
   const checkpoint = saved.get(CAREER_KEY);
   env.context.__sim.selectMode('observation');
   assert.equal(fixture.calls.views.at(-1), 'overview');
   assert.equal(env.context.PLFloorView.player(), null);
   assert.equal(follow.hidden, true);
   assert.equal(follow.disabled, true);
+  assert.equal(env.context.document.body.classList.contains('careerLayout'), false);
+  assert.equal(viewport.classList.contains('floorExpanded'), false, 'Observation clears the career size override');
+  assert.equal(env.context.document.body.classList.contains('floorIsExpanded'), false);
+  assert.equal(size.getAttribute('aria-expanded'), 'false');
   assert.equal(saved.get(CAREER_KEY), checkpoint);
 });
 

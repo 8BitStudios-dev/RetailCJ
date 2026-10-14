@@ -8,11 +8,14 @@
   const controls = document.getElementById('cameraControls');
   const status = document.getElementById('floorStatus');
   const retryButton = document.getElementById('floorRetry');
+  const viewport = document.getElementById('floorViewport');
+  const sizeButton = document.getElementById('floorSizeToggle');
   let renderer = null;
   let pending = null;
   let currentView = 'overview';
   let failure = null;
   let generation = 0;
+  let expanded = false;
 
   function message(text) {
     if (status) status.textContent = text;
@@ -34,6 +37,13 @@
       button.disabled = !active || (playerButton && !eligiblePlayer);
     });
     if (controls) controls.hidden = !active;
+    if (viewport) viewport.classList.toggle('floorExpanded', expanded);
+    document.body.classList.toggle('floorIsExpanded', expanded);
+    if (sizeButton) {
+      sizeButton.disabled = !active || !renderer;
+      sizeButton.textContent = expanded ? 'Riduci' : 'Ingrandisci';
+      sizeButton.setAttribute('aria-expanded', String(expanded));
+    }
     if (retryButton) {
       retryButton.hidden = !failure;
       retryButton.disabled = Boolean(pending) && failure !== 'contextlost';
@@ -68,10 +78,13 @@
   }
 
   function syncCareerCamera() {
-    currentView = careerPlayer() ? 'player' : 'overview';
+    const eligiblePlayer = Boolean(careerPlayer());
+    currentView = eligiblePlayer ? 'player' : 'overview';
+    document.body.classList.toggle('careerLayout', eligiblePlayer);
+    expanded = false;
     try {
-      if (api.active && renderer) api.setView(currentView);
       update();
+      if (api.active && renderer) api.setView(currentView);
       if (api.active) message('');
     } catch (_) { fail('render'); }
     return currentView === 'player';
@@ -88,6 +101,19 @@
     return true;
   }
 
+  function setSize(value) {
+    const next = Boolean(value);
+    if (!api.active || !renderer || next === expanded) return expanded;
+    expanded = next;
+    update();
+    try { renderer.resize(); } catch (_) { fail('render'); }
+    return expanded;
+  }
+
+  function toggleSize() {
+    return setSize(!expanded);
+  }
+
   function retry() {
     if (failure === 'contextlost') return Promise.resolve(false);
     if (pending) return pending;
@@ -99,7 +125,7 @@
     failure = null;
     disconnect();
     message('Caricamento del floor 3D…');
-    const work = import('./renderer-3d.js?v=2.0.0').then(({ FloorRenderer }) => {
+    const work = import('./renderer-3d.js?v=2.0.1').then(({ FloorRenderer }) => {
       if (attempt !== generation) return false;
       phase = 'render';
       const candidate = new FloorRenderer({ canvas, onSelect: api.select });
@@ -129,7 +155,10 @@
     retry,
     syncCareerCamera,
     followPlayer,
+    setSize,
+    toggleSize,
     fail,
+    get expanded() { return expanded; },
     get ready() { return pending || Promise.resolve(Boolean(api.active)); },
   };
 
@@ -139,6 +168,11 @@
     currentView = button.dataset.floorView;
     try { api.setView(currentView); update(); message(''); } catch (_) { fail('render'); }
   }));
+  if (sizeButton) {
+    sizeButton.setAttribute('type', 'button');
+    sizeButton.setAttribute('aria-controls', 'floor3d');
+    sizeButton.addEventListener('click', toggleSize);
+  }
   if (retryButton) retryButton.addEventListener('click', () => {
     if (failure === 'contextlost') {
       if (root.location && typeof root.location.reload === 'function') root.location.reload();
@@ -156,6 +190,6 @@
   });
 
   api.setReady(false);
-  update();
+  syncCareerCamera();
   retry();
 })(window);

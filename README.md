@@ -70,7 +70,7 @@ Ruolo e competenza sono inclusi nei salvataggi e nei backup versione 2. I salvat
 
 ## Interfaccia e struttura
 
-RetailCJ 2.0.0 usa un unico floor 3D. I comandi di tempo, modalità e camera si trovano sopra la scena, insieme alle azioni dello Specialist e agli strumenti di Osservazione. Dati, squadra e dettaglio della selezione restano nel pannello laterale. Il menu iniziale non propone scelte grafiche e l’interfaccia non mostra numero di versione o pulsante di aggiornamento.
+RetailCJ 2.0.1 usa un unico floor 3D. I comandi di tempo e modalità si trovano sopra la scena, insieme alle azioni dello Specialist e agli strumenti di Osservazione. I comandi della camera sono piccoli e disposti su una sola riga sotto la scena. In Carriera il floor parte compatto e lascia il pannello principale all’interazione con il cliente; su telefono l’interazione segue subito la scena. «Ingrandisci» estende il floor a tutta larghezza, «Riduci» torna al layout compatto. Il ridimensionamento conserva inquadratura, zoom e inseguimento del giocatore, senza toccare simulazione o salvataggi. Osservazione mantiene il floor grande. Dati, squadra e dettaglio della selezione restano come informazioni secondarie. Il menu iniziale non propone scelte grafiche e l’interfaccia non mostra numero di versione o pulsante di aggiornamento.
 
 `index.html` contiene la schermata e carica `game.js`, che conserva la simulazione e i salvataggi. `floor-view.js` avvia il renderer e gestisce camera, caricamento e recupero dagli errori. `renderer-3d.js` costruisce la scena; `floor-view.css` gestisce il layout. Il vecchio renderer del floor in 2D, i suoi asset grafici e il sistema di aggiornamento manuale sono stati rimossi. La versione rimane nei metadati e nei parametri degli asset per la cache.
 

@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1b22">
-<meta name="application-version" content="2.0.0">
+<meta name="application-version" content="2.0.1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="icon" type="image/png" sizes="32x32" href="assets/piazza-liberty-icon-32.png?v=2.0.0">
-<link rel="icon" type="image/png" sizes="512x512" href="assets/piazza-liberty-icon.png?v=2.0.0">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/piazza-liberty-icon-180.png?v=2.0.0">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/piazza-liberty-icon-32.png?v=2.0.1">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/piazza-liberty-icon.png?v=2.0.1">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/piazza-liberty-icon-180.png?v=2.0.1">
 <title>RetailCJ — Piazza Liberty 3D</title>
 <style>
   :root {
@@ -138,11 +138,11 @@
   #brLeft { margin: 4px 0 10px; }
 
 </style>
-<link rel="stylesheet" href="specialist-ui.css?v=2.0.0">
-<link rel="stylesheet" href="game-modes.css?v=2.0.0">
-<link rel="stylesheet" href="career-welcome.css?v=2.0.0">
-<link rel="stylesheet" href="observation-ui.css?v=2.0.0">
-<link rel="stylesheet" href="floor-view.css?v=2.0.0">
+<link rel="stylesheet" href="specialist-ui.css?v=2.0.1">
+<link rel="stylesheet" href="game-modes.css?v=2.0.1">
+<link rel="stylesheet" href="career-welcome.css?v=2.0.1">
+<link rel="stylesheet" href="observation-ui.css?v=2.0.1">
+<link rel="stylesheet" href="floor-view.css?v=2.0.1">
 </head>
 <body>
 <div class="app">
@@ -157,17 +157,26 @@
       </div>
       <div class="npsRow" id="npsRow"></div>
       <div class="goalRow" id="goalRow" hidden></div>
-      <div id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D">
-        <div role="group" aria-label="Inquadrature del floor"><button type="button" data-floor-view="player" hidden>Seguimi</button><button type="button" data-floor-view="overview" class="on">Panoramica</button><button type="button" data-floor-view="top">Dall’alto</button><button type="button" data-floor-view="express">Express</button><button type="button" data-floor-view="product">Point Product</button><button type="button" data-floor-view="genius">Point Genius Bar</button></div>
-        <span>Trascina per ruotare · rotella o due dita per zoomare</span>
-      </div>
       <p id="floorStatus" class="floorStatus" role="status"></p><button id="floorRetry" type="button" hidden>Riprova il 3D</button>
     </header>
     <div class="box commandBar" id="playerCommands" hidden aria-label="Azioni del tuo turno"></div>
     <div class="box observationCommands" id="observationControls" hidden aria-label="Comandi di Osservazione"></div>
   </div>
   <div class="stage">
-    <div class="scroller" id="scroller"><canvas id="floor3d" tabindex="0" aria-label="Floor 3D: trascina per ruotare, usa lo zoom e seleziona una persona o un tavolo"></canvas></div>
+    <div class="floorViewport" id="floorViewport">
+      <div class="scroller" id="scroller"><canvas id="floor3d" tabindex="0" aria-label="Floor 3D: trascina per ruotare, usa lo zoom e seleziona una persona o un tavolo"></canvas></div>
+      <nav id="cameraControls" class="floorCameraBar" hidden aria-label="Camera 3D">
+        <button type="button" id="floorSizeToggle" aria-controls="floor3d" aria-expanded="false" disabled>Ingrandisci</button>
+        <div role="group" aria-label="Inquadrature del floor">
+          <button type="button" data-floor-view="player" aria-label="Seguimi" title="Seguimi" hidden><span class="cameraLabelFull">Seguimi</span><span class="cameraLabelShort" aria-hidden="true">Segui</span></button>
+          <button type="button" data-floor-view="overview" aria-label="Panoramica" title="Panoramica" class="on"><span class="cameraLabelFull">Panoramica</span><span class="cameraLabelShort" aria-hidden="true">Pan.</span></button>
+          <button type="button" data-floor-view="top" aria-label="Dall’alto" title="Dall’alto"><span class="cameraLabelFull">Dall’alto</span><span class="cameraLabelShort" aria-hidden="true">Alto</span></button>
+          <button type="button" data-floor-view="express" aria-label="Express" title="Express">Express</button>
+          <button type="button" data-floor-view="product" aria-label="Point Product" title="Point Product"><span class="cameraLabelFull">Point Product</span><span class="cameraLabelShort" aria-hidden="true">Product</span></button>
+          <button type="button" data-floor-view="genius" aria-label="Point Genius Bar" title="Point Genius Bar"><span class="cameraLabelFull">Point Genius Bar</span><span class="cameraLabelShort" aria-hidden="true">Genius</span></button>
+        </div>
+      </nav>
+    </div>
     <div class="overlay show" id="intro">
       <div class="introBox">
         <div class="introMenu" id="introMenu">
@@ -260,8 +269,10 @@
       </div>
     </div>
   </div>
-  <div class="side">
+  <section class="interactionPane" id="interactionPane" aria-label="Interazione e percorso del tuo Specialist">
     <div class="box playerPanel" id="playerPanel"></div>
+  </section>
+  <div class="side">
     <div class="box">
       <h3>Oggi</h3>
       <div class="stats" id="stats"></div>
@@ -300,16 +311,16 @@
   </div>
 </div>
 
-<script src="career-progression.js?v=2.0.0"></script>
-<script src="career-save.js?v=2.0.0"></script>
-<script src="specialist-mode.js?v=2.0.0"></script>
-<script src="specialist-ui.js?v=2.0.0"></script>
-<script src="game-modes.js?v=2.0.0"></script>
-<script src="career-welcome.js?v=2.0.0"></script>
-<script src="observation-lab.js?v=2.0.0"></script>
-<script src="observation-engine.js?v=2.0.0"></script>
-<script src="observation-ui.js?v=2.0.0"></script>
-<script src="game.js?v=2.0.0"></script>
-<script src="floor-view.js?v=2.0.0"></script>
+<script src="career-progression.js?v=2.0.1"></script>
+<script src="career-save.js?v=2.0.1"></script>
+<script src="specialist-mode.js?v=2.0.1"></script>
+<script src="specialist-ui.js?v=2.0.1"></script>
+<script src="game-modes.js?v=2.0.1"></script>
+<script src="career-welcome.js?v=2.0.1"></script>
+<script src="observation-lab.js?v=2.0.1"></script>
+<script src="observation-engine.js?v=2.0.1"></script>
+<script src="observation-ui.js?v=2.0.1"></script>
+<script src="game.js?v=2.0.1"></script>
+<script src="floor-view.js?v=2.0.1"></script>
 </body>
 </html>
