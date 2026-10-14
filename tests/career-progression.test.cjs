@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {chooseGuided} = require('./interaction-helpers.cjs');
 
 const CAREER_KEY = 'plgame.career.v1';
 const roles = [
@@ -56,6 +57,7 @@ function client(env, extra = {}) {
 function until(env, condition, limit = 240) {
   for (let elapsed = 0; elapsed < limit; elapsed += 0.05) {
     if (env.evaluate(condition)) return;
+    chooseGuided(env);
     env.advance(0.05);
   }
   assert.fail('Simulation did not reach: ' + condition + ' (state ' + env.mode().player().state + ')');
@@ -197,7 +199,12 @@ test('a real consultation without purchase learns a stress-adjusted two-point re
   const c = client(env, {fast: false});
   env.context.testClient = c;
   env.mode().takeNext();
-  env.evaluate('Math.random = () => 0.999');
+  until(env, 'playerMode.hasChoice()');
+  for (const suffix of ['direct', 'assume', 'specs', 'move-on', 'finish']) {
+    const question = env.view().interaction;
+    const option = question.options.find(item => item.id.endsWith('-' + suffix));
+    assert.equal(env.mode().chooseInteraction(option.id, question.token), true);
+  }
   until(env, "testClient.outcome === 'browsed'");
   const earned = learningReward(env, 2);
   env.mode().recordLeave(c, 'browsed');

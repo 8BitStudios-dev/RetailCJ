@@ -1199,7 +1199,7 @@ function serve(s, c, weight = 1, errMul = 1) {
     say(c, 'angry', 2);
     if (!c.rudeCounted) { c.rudeCounted = true; game.stats.rude++; log(`Un cliente scortese con ${s.name}`); }
   }
-  if (Math.random() < errorChance(s, c) * weight * errMul) {
+  if (!(s.isPlayer && c.interactionControlled) && Math.random() < errorChance(s, c) * weight * errMul) {
     c.exp -= 22; c.error = true;
     say(s, 'oops', 2);
     if (!s.isPlayer) bump(s, 'mot', -3);
@@ -1580,9 +1580,10 @@ const REPAIR_NAME = ['rapida', 'media', 'complessa'];
 const BUSY = new Set(['waitHelp', 'toHelp', 'assist', 'toAccWall', 'atAccWall', 'backToTable', 'tradeOnly', 'toBack', 'picking', 'delivering', 'handing', 'probe', 'demo', 'checkout', 'repair', 'advise', 'listening', 'escort', 'presenting', 'toCustomer', 'toWallCustomer', 'toBar']);
 // Point ed Express stressano più della vendita e degli accessori
 const ROLE_STRESS = { point: 1.3, express: 1.3, specialist: 1, accessori: 0.9, genius: 0.8, creative: 0.8, ops: 1 };
-BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen');
+BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen'); BUSY.add('interaction');
 const SUPPORT_PHASES = new Set(['probe', 'listen', 'helping', 'advise', 'repair']);
 function requestExpert(s, c) {
+  if (s.isPlayer && c && c.interactionControlled) return;
   if (!c || c.helpChecked || !['S', 'TS'].includes(s.tier) || !SUPPORT_PHASES.has(s.state)) return;
   const demanding = c.complex || c.familiarity === 2 || c.hurry === 2 || c.mood < 35 || (s.tier === 'TS' && c.repair > 0);
   if (!demanding) return;
@@ -1691,6 +1692,9 @@ function updateStaff(s, dt) {
     case 'toWallCustomer':
       if (!c || c.state !== 'waitWall') { s.customer = null; s.state = 'idle'; s.t = 1; break; }
       if (arrived) {
+        if (s.isPlayer && playerMode && playerMode.beginInteraction(c)) {
+          c.state = 'servedWall'; serve(s, c); face(s, c); break;
+        }
         s.state = 'advise'; s.t = rand(2, 4) * pace(s) * profileTime(c); c.state = 'servedWall'; serve(s, c);
         face(s, c); say(s, 'question', s.t / 2); say(c, 'dots', s.t);
       }
@@ -1718,6 +1722,9 @@ function updateStaff(s, dt) {
     case 'toCustomer':
       if (!c || c.state !== 'waiting') { s.customer = null; s.state = 'idle'; s.t = 1; break; }
       if (arrived) {
+        if (s.isPlayer && playerMode && playerMode.beginInteraction(c)) {
+          c.state = 'served'; serve(s, c); face(s, c); break;
+        }
         c.state = 'served'; serve(s, c); face(s, c);
         if (c.tradeOnly) {
           s.state = 'tradeOnly'; s.t = rand(6, 12) * pace(s); say(s, 'trade', s.t); say(c, 'iphone', 2);
@@ -1732,6 +1739,9 @@ function updateStaff(s, dt) {
         say(s, 'hi', s.t); say(c, 'hi', s.t);
         log(`${s.name} segue un ${describe(c)} al tavolo ${c.slot.table.name}`);
       }
+      break;
+    case 'interaction':
+      // The conversation advances through explicit choices in the career panel.
       break;
     case 'approach':
       s.t -= dt;
@@ -2155,6 +2165,61 @@ function backForTrade(c) {
   log('Trasferimento finito: il cliente porta il vecchio telefono a uno Specialist per il Trade In');
 }
 
+function workInteraction(minutes) {
+  // Apply the action's simulated work to the entire floor without making the player wait for a bar.
+  let remaining = Math.max(0, Math.min(30, Number(minutes) || 0));
+  while (remaining > 0.000001 && !game.over) {
+    const before = game.time;
+    step(Math.min(0.05, remaining));
+    const elapsed = game.time - before;
+    if (elapsed <= 0) break;
+    remaining -= elapsed;
+  }
+  acc = 0;
+}
+
+function finishInteraction(s, c, result) {
+  if (!playerMode || !playerMode.owns(s) || s.customer !== c || c.outcome || c.gone || game.over) return false;
+  c.interactionResult = result;
+  c.exp = clamp(c.exp + result.qualityDelta);
+  bump(s, 'stress', result.stressDelta);
+  if (result.seriousError) {
+    c.exp = clamp(c.exp - 18);
+    c.error = true; game.stats.errors++;
+    bump(s, 'stress', window.PLCareerProgression.errorStress(s.stats));
+    playerMode.recordError(); careerLeadSupport(s, c, 'error');
+  }
+  c.needKnown = Boolean(result.needKnown);
+  c.businessReferral = Boolean(result.business);
+  c.accTried = true; c.svcTried = true;
+  log(`Tu completi le cinque fasi con il cliente #${c.id}: ${result.minutes.toFixed(1)} minuti di conversazione.`);
+  if (c.kind === 'help') {
+    s.served++;
+    if (result.qualityDelta >= -6) { game.stats.helped++; leave(c, 'helped'); }
+    else leave(c, 'browsed');
+    s.customer = null; s.state = 'idle'; s.t = Infinity;
+    return true;
+  }
+  if (!result.purchase) { finishSale(s, c, false); return true; }
+  c.bought = true;
+  if (c.kind === 'acc') {
+    s.served++; game.stats.wallSales++;
+    requestItem(c, 'acc');
+    c.state = 'waitDelivery'; s.state = 'waitProduct';
+    say(c, 'wait', 999); say(s, 'wait', 999);
+    return true;
+  }
+  c.accessory = Boolean(result.accessory);
+  c.service = Boolean(result.service);
+  if (c.accessory) c.accName = c.need && c.need.acc || 'un accessorio adatto';
+  if (result.setup && !c.setup) c.setup = 'transfer';
+  c.tradeIn = Boolean(c.tradeIn || result.tradeIn);
+  requestItem(c, 'product');
+  if (c.accessory) requestItem(c, 'acc');
+  s.state = 'checkout'; s.t = 0.05;
+  return true;
+}
+
 function finishSale(s, c, bought) {
   const st = game.stats;
   s.served++;
@@ -2478,6 +2543,7 @@ function render(realDt = 0) {
 // ─────────────────────────────────────────────────────────────
 const rows = list => list.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
 const STATE_LABEL = {
+  interaction: 'conversa con il cliente · scegli nel pannello',
   approach: 'accoglie il cliente · Approach', listen: 'ascolta dubbi e verifica la soluzione · Listen',
   toExpert: 'raggiunge una persona esperta', expertAdvice: 'chiede un consiglio', fromExpert: 'torna dal cliente',
   inLine: 'in fila per il Point', toPoint: 'va dal Point', talking: 'dice al Point cosa cerca', toTable: 'va al tavolo', waiting: 'aspetta qualcuno',
@@ -2501,6 +2567,7 @@ let lastPanel = 0;
 function updatePanel() {
   if (observation) window.PLObservationUI.render(observation.view);
   const personalView = playerMode ? playerMode.view() : { enabled: false };
+  personalView.interactionEnabled = Boolean(personalView.interactionEnabled && floorReady);
   if (careerPromotionNotice && personalView.enabled) personalView.message = careerPromotionNotice;
   window.PLSpecialistUI.render(personalView);
   window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
@@ -2638,7 +2705,10 @@ const FIXED = 0.05; // minuti di gioco per passo
 let acc = 0, last = performance.now();
 function frame(now) {
   const real = Math.min(0.1, (now - last) / 1000); last = now;
-  if (floorReady) {
+  if (floorReady && playerMode && playerMode.hasChoice()) {
+    acc = 0;
+    playerMode.tickChoice(real);
+  } else if (floorReady) {
     acc += real * game.speed / REAL_SEC_PER_MIN;
     while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
   } else acc = 0;
@@ -2692,6 +2762,8 @@ if (window.autoCoach) { intro.on = false; document.getElementById('intro').class
 function createPlayerMode() {
   return window.PLPlayerMode.create({
     getGame: () => game, OPEN, CLOSE, TEAM, PRODUCT_NAME, STATE_LABEL, goTo, isAvailable, onBreak, serve, log, rand, bump,
+    canInteract: () => !modePicking && !intro.on,
+    workInteraction, finishInteraction,
   });
 }
 let playerMode = SPECIALIST_ON ? createPlayerMode() : null;
@@ -2700,6 +2772,7 @@ window.PLSpecialistUI.bind({
   pause: () => { careerPromotionNotice = ''; if (playerMode) playerMode.requestBreak(); updatePanel(); },
   focus: () => { if (playerMode) { playerMode.focus(); if (window.PLFloorViewUI) window.PLFloorViewUI.followPlayer(); } updatePanel(); },
   promote: promoteCareer,
+  choose: (id, token) => { const accepted = floorReady && playerMode && playerMode.chooseInteraction(id, token); updatePanel(); return Boolean(accepted); },
 });
 function saveCareerCheckpoint(phase) {
   if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;

@@ -17,6 +17,10 @@
       let message = '';
       let records = new Map();
       let totals = freshTotals();
+      let interaction = null;
+      let interactionCustomer = null;
+      let lastInteraction = null;
+      let workingChoice = false;
 
       function freshTotals() {
         return { served: 0, sales: 0, accessories: 0, services: 0, helped: 0, setups: 0 };
@@ -115,6 +119,10 @@
         closing = false;
         records = new Map();
         totals = freshTotals();
+        interaction = null;
+        interactionCustomer = null;
+        lastInteraction = null;
+        workingChoice = false;
         message = 'Segui una persona in attesa quando sei disponibile.';
         const team = api.TEAM;
         if (!team[NAME]) team[NAME] = { tier: 'S', mot: 65, stress: 20, comp: 0, cap: 100, off: [], vacWeek: -1 };
@@ -147,6 +155,7 @@
         const c = reserveNext();
         if (!c) { message = 'Non ci sono persone in attesa da prendere in carico.'; return null; }
         const alreadyPersonal = personal(c);
+        lastInteraction = null;
         c.ownerId = PLAYER_ID;
         delete c.playerReserved;
         track(c, alreadyPersonal ? undefined : c.kind === 'buy' && !c.bought && !c.saleCounted && !c.tradeOnly);
@@ -166,6 +175,51 @@
         message = `Hai preso in carico il cliente #${c.id}.`;
         api.log(`Tu segui il cliente #${c.id}: ${productLabel(c)}`);
         return c;
+      }
+      function canInteract() {
+        return running(game()) && (!api.canInteract || api.canInteract());
+      }
+      function hasChoice() {
+        return Boolean(interaction && !interaction.complete && interactionCustomer &&
+          entity && entity.customer === interactionCustomer && !interactionCustomer.gone &&
+          !interactionCustomer.outcome && !closing);
+      }
+      function beginInteraction(c) {
+        if (!owns(entity) || !personal(c) || c.tradeOnly || !root.PLCareerInteraction || !canInteract()) return false;
+        interaction = root.PLCareerInteraction.create(c, entity.stats);
+        interactionCustomer = c;
+        c.interactionControlled = true;
+        entity.state = 'interaction'; entity.t = Infinity;
+        message = 'Scegli come proseguire. Il turno avanza con le tue azioni; leggere non consuma minuti.';
+        return true;
+      }
+      function applyAnswer(answer) {
+        if (!answer || !answer.accepted || workingChoice) return false;
+        const session = interaction, c = interactionCustomer;
+        workingChoice = true;
+        try { api.workInteraction(answer.minutes); } finally { workingChoice = false; }
+        // Closing a shift can interrupt an action. Never complete or sell from an abandoned session.
+        if (closing || game().over || interaction !== session || entity.customer !== c || c.outcome || c.gone) return true;
+        message = answer.feedback;
+        if (session.complete) {
+          const result = session.result;
+          lastInteraction = {
+            feedback: result.feedback.slice(0, 2), minutes: result.minutes, decisions: result.decisions,
+            reply: answer.feedback,
+            qualityLabel: result.seriousError ? 'Promessa da verificare' : result.qualityDelta >= 8 ? 'Conversazione curata' : result.qualityDelta >= 0 ? 'Conversazione buona' : 'Conversazione da migliorare',
+          };
+          interaction = null; interactionCustomer = null;
+          api.finishInteraction(entity, c, result);
+        }
+        return true;
+      }
+      function chooseInteraction(id, token) {
+        if (workingChoice || !hasChoice() || !canInteract()) return false;
+        return applyAnswer(interaction.choose(id, token));
+      }
+      function tickChoice(seconds) {
+        if (workingChoice || !hasChoice() || !canInteract() || game().speed <= 0) return false;
+        return applyAnswer(interaction.tick(seconds));
       }
       function canPause(g) {
         return running(g) && !api.onBreak(entity) && !entity.wantsBreak &&
@@ -274,6 +328,8 @@
           record.closedAt = game().time;
         });
         closing = true;
+        interaction = null;
+        interactionCustomer = null;
         clearReservations(game());
         message = 'Turno concluso. Le visite incomplete restano distinte dai servizi conclusi.';
       }
@@ -288,6 +344,7 @@
       }
       function phase(s) {
         if (!s) return 'idle';
+        if (hasChoice()) return interaction.view().phase;
         const state = s.expertHelp ? s.expertHelp.resume : s.state;
         if (['toCustomer', 'toWallCustomer', 'approach'].includes(state)) return 'approach';
         if (state === 'probe') return 'probe';
@@ -297,6 +354,7 @@
         return 'idle';
       }
       function stateLabel(s) {
+        if (hasChoice()) return 'Scegli come proseguire · ' + interaction.view().phaseLabel;
         if (s.state === 'checkout' && s.bubble) {
           if (s.bubble.icon === 'trade') return 'Valuti il dispositivo per il Trade In';
           if (s.bubble.icon === 'card') return 'Prepari la pratica di finanziamento';
@@ -342,6 +400,8 @@
         return {
           enabled: true, name: NAME, role: career.role, career, shift: shift ? { ...shift } : null,
           needsBreak: Boolean(s && s.needsBreak), status, phase: followUp ? 'extend' : phase(s),
+          interaction: hasChoice() ? interaction.view() : null,
+          interactionEnabled: canInteract(), lastInteraction,
           active: c ? { id: c.id, productLabel: productLabel(c), description: describe(c),
             stateLabel: followUp ? labels()[c.state] || 'Il cliente continua la visita dopo la consegna' : stateLabel(s),
             startedAt: clock(record ? record.startedAt : g.time), needsSetup: Boolean(c.setup) } : null,
@@ -352,6 +412,7 @@
         };
       }
       return { newDay, step, takeNext, reserveNext, requestBreak, recordError, completeBreak, shiftEnd, focus, promote, view, recordLeave, beforeClose,
+        beginInteraction, chooseInteraction, tickChoice, hasChoice,
         player: () => entity, owns };
     },
   };

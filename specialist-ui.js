@@ -111,7 +111,50 @@
       const stage = node('li', 'playerStep', progress, label);
       stage.title = STAGE_HINTS[i]; return stage;
     });
-    node('div', 'playerDescription', current, 'L’ascolto accompagna tutta la visita. Acquisto, servizi e Setup fanno parte del percorso.');
+    const interaction = node('section', 'playerInteraction', current);
+    interaction.hidden = true;
+    interaction.setAttribute('aria-label', 'Interazione con il cliente');
+    const interactionHeader = node('div', 'playerInteractionHeader', interaction);
+    const interactionPhase = node('strong', 'playerInteractionPhase', interactionHeader);
+    const timer = node('span', 'playerDecisionTimer', interactionHeader);
+    timer.setAttribute('aria-live', 'off');
+    const speaker = node('div', 'playerSpeaker', interaction);
+    const speech = node('p', 'playerSpeech', interaction);
+    const cue = node('p', 'playerCue', interaction);
+    const leadHint = node('p', 'playerLeadHint', interaction);
+    const choices = node('div', 'playerChoices', interaction);
+    choices.setAttribute('role', 'group');
+    choices.setAttribute('aria-label', 'Scegli come proseguire');
+    const choiceRows = Array.from({ length: 3 }, () => {
+      const control = node('button', 'playerChoice', choices);
+      control.type = 'button';
+      control.dataset.specialistChoice = '';
+      control.disabled = true;
+      const heading = node('span', 'playerChoiceHeading', control);
+      const label = node('strong', 'playerChoiceLabel', heading);
+      const minutes = node('span', 'playerChoiceMinutes', heading);
+      const detail = node('span', 'playerChoiceDetail', control);
+      const recommendation = node('span', 'playerChoiceRecommendation', control, 'Consiglio del Lead');
+      recommendation.hidden = true;
+      control.addEventListener('keydown', event => {
+        if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault();
+      });
+      return { control, label, detail, minutes, recommendation, optionId: null, token: null, canChoose: false };
+    });
+    const choiceFootnote = node('p', 'playerChoiceFootnote', interaction,
+      'I minuti indicano il lavoro sul floor; leggere non consuma il turno.');
+    const feedback = node('div', 'playerInteractionFeedback', current);
+    feedback.hidden = true;
+    feedback.setAttribute('role', 'status');
+    feedback.setAttribute('aria-live', 'polite');
+    const result = node('section', 'playerInteractionResult', current);
+    result.hidden = true;
+    result.setAttribute('aria-label', 'Risultato della conversazione');
+    const resultTitle = node('strong', 'playerResultTitle', result);
+    const resultMeta = node('div', 'playerResultMeta', result);
+    const resultFeedback = node('ul', 'playerResultFeedback', result);
+    const resultRows = Array.from({ length: 2 }, () => node('li', '', resultFeedback));
+    const visitHint = node('div', 'playerDescription', current, 'L’ascolto accompagna tutta la visita. Acquisto, servizi e Setup fanno parte del percorso.');
 
     const metrics = node('div', 'playerMetrics', root);
     const stats = {};
@@ -152,9 +195,26 @@
 
     refs = { root, commands, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
-      stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
+      stages, interaction, interactionPhase, timer, speaker, speech, cue, leadHint, choiceRows, choiceFootnote, feedback,
+      result, resultTitle, resultMeta, resultRows, visitHint, submittedToken: null,
+      stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     for (const container of [root, commands]) {
       container.addEventListener('click', event => {
+        const choiceControl = event.target.closest('button[data-specialist-choice]');
+        if (choiceControl && container.contains(choiceControl)) {
+          if (choiceControl.disabled || event.detail > 1 || typeof actions.choose !== 'function') return;
+          const choice = refs.choiceRows.find(row => row.control === choiceControl);
+          if (!choice || choice.optionId === null || refs.submittedToken === choice.token) return;
+          const optionId = choice.optionId;
+          const token = choice.token;
+          refs.submittedToken = token;
+          refs.choiceRows.forEach(row => { row.control.disabled = true; });
+          if (actions.choose(optionId, token) === false && refs.submittedToken === token) {
+            refs.submittedToken = null;
+            refs.choiceRows.forEach(row => { row.control.disabled = !row.canChoose; });
+          }
+          return;
+        }
         const control = event.target.closest('button[data-specialist-action]');
         if (!control || !container.contains(control) || control.disabled) return;
         const action = actions[control.dataset.specialistAction];
@@ -235,7 +295,8 @@
     r.state.hidden = !r.state.textContent;
     r.started.hidden = !r.started.textContent;
     r.progress.hidden = !active;
-    const currentPhase = active ? phaseIndex(view.phase || active.stateLabel) : -1;
+    const conversation = view.interaction;
+    const currentPhase = active ? phaseIndex(conversation && conversation.phase || view.phase || active.stateLabel) : -1;
     r.stages.forEach((stage, i) => {
       stage.hidden = false;
       stage.classList.toggle('isDone', currentPhase >= 0 && i < currentPhase);
@@ -243,6 +304,80 @@
       if (i === currentPhase) stage.setAttribute('aria-current', 'step');
       else stage.removeAttribute('aria-current');
     });
+
+    const feedbackText = value => {
+      if (Array.isArray(value)) return value.map(feedbackText).filter(Boolean).join(' ');
+      if (value && typeof value === 'object') return String(value.text || value.message || '');
+      return value === undefined || value === null ? '' : String(value);
+    };
+    r.interaction.hidden = !conversation;
+    r.visitHint.hidden = Boolean(conversation || view.lastInteraction);
+    if (conversation) {
+      const phase = phaseIndex(conversation.phase);
+      setText(r.interactionPhase, conversation.phaseLabel || (phase >= 0 ? STAGES[phase] : 'La tua scelta'));
+      setText(r.speaker, conversation.speaker || 'Il cliente');
+      setText(r.speech, conversation.speech);
+      r.speech.hidden = !r.speech.textContent;
+      setText(r.cue, conversation.cue);
+      r.cue.hidden = !r.cue.textContent;
+      const hint = conversation.guided && conversation.hint
+        ? String(conversation.hint).replace(/^(?:il\s+)?lead\s*[:—–-]\s*/i, '') : '';
+      setText(r.leadHint, hint ? 'Il Lead: ' + hint : '');
+      r.leadHint.hidden = !r.leadHint.textContent;
+      const seconds = Number(conversation.secondsLeft);
+      const hasTimer = conversation.secondsLeft !== null && conversation.secondsLeft !== undefined && Number.isFinite(seconds);
+      r.timer.hidden = Boolean(conversation.complete);
+      if (hasTimer) {
+        setText(r.timer, Math.max(0, Math.ceil(seconds)) + ' s per scegliere');
+        r.timer.classList.toggle('isNearEnd', seconds <= 5);
+      } else {
+        setText(r.timer, 'Scegli con calma');
+        r.timer.classList.remove('isNearEnd');
+      }
+      r.choiceFootnote.hidden = Boolean(conversation.complete);
+      const options = Array.isArray(conversation.options) ? conversation.options.slice(0, 3) : [];
+      r.choiceRows.forEach((row, i) => {
+        const option = options[i];
+        row.control.hidden = !option || Boolean(conversation.complete);
+        row.optionId = option ? option.id : null;
+        row.token = conversation.token;
+        row.control.dataset.specialistChoice = option ? String(option.id) : '';
+        row.control.dataset.choiceToken = String(conversation.token || '');
+        row.canChoose = Boolean(option) && !conversation.complete && view.interactionEnabled !== false;
+        row.control.disabled = !row.canChoose || r.submittedToken === conversation.token;
+        if (!option) return;
+        setText(row.label, option.label);
+        setText(row.detail, option.detail);
+        row.detail.hidden = !row.detail.textContent;
+        const duration = Number(option.minutes);
+        const hasDuration = option.minutes !== undefined && option.minutes !== null && Number.isFinite(duration);
+        setText(row.minutes, hasDuration ? Math.max(0, Math.round(duration * 10) / 10).toLocaleString('it-IT') + ' min di turno' : '');
+        row.minutes.hidden = !hasDuration;
+        row.recommendation.hidden = !(conversation.guided && option.recommended);
+        row.control.classList.toggle('isRecommended', Boolean(conversation.guided && option.recommended));
+      });
+      setText(r.feedback, feedbackText(conversation.feedback));
+    } else {
+      r.choiceRows.forEach(row => { row.control.disabled = true; row.optionId = null; row.canChoose = false; });
+      setText(r.feedback, view.lastInteraction && view.lastInteraction.reply || '');
+    }
+    r.feedback.hidden = !r.feedback.textContent;
+    const lastInteraction = view.lastInteraction;
+    r.result.hidden = !lastInteraction || Boolean(conversation);
+    if (lastInteraction) {
+      setText(r.resultTitle, lastInteraction.qualityLabel || 'Visita conclusa');
+      const minutes = Number(lastInteraction.minutes);
+      const decisions = Number(lastInteraction.decisions);
+      const resultDetails = [];
+      if (Number.isFinite(minutes)) resultDetails.push(Math.max(0, Math.round(minutes * 10) / 10).toLocaleString('it-IT') + ' min di turno');
+      if (Number.isFinite(decisions)) resultDetails.push(count(decisions) + ' scelte');
+      setText(r.resultMeta, resultDetails.join(' · '));
+      const remarks = Array.isArray(lastInteraction.feedback) ? lastInteraction.feedback.slice(0, 2) : [lastInteraction.feedback];
+      r.resultRows.forEach((row, i) => {
+        setText(row, feedbackText(remarks[i]));
+        row.hidden = !row.textContent;
+      });
+    }
 
     const stats = view.stats || {};
     Object.keys(r.stats).forEach(key => setText(r.stats[key], count(stats[key])));
@@ -262,7 +397,7 @@
     r.pause.disabled = !view.canPause || Boolean(view.isOver);
     r.focus.disabled = !view.enabled;
     setText(r.message, view.message);
-    r.message.hidden = !r.message.textContent;
+    r.message.hidden = !r.message.textContent || r.message.textContent === r.feedback.textContent;
 
     const recent = Array.isArray(view.history) ? view.history.slice(0, 3) : [];
     r.recent.hidden = recent.length === 0;

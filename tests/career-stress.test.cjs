@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {guidedChoiceSource, chooseGuided} = require('./interaction-helpers.cjs');
 
 const CAREER_KEY = 'plgame.career.v1';
 
@@ -36,7 +37,10 @@ function helpClient(env) {
 function until(env, condition, minutes = 120) {
   const result = env.evaluate(`(() => {
     let ticks = 0;
-    while (!(${condition}) && !game.over && ticks++ < ${Math.ceil(minutes / 0.05)}) step(0.05);
+    while (!(${condition}) && !game.over && ticks++ < ${Math.ceil(minutes / 0.05)}) {
+      ${guidedChoiceSource}
+      step(0.05);
+    }
     return {reached: Boolean(${condition}), time: game.time, state: playerMode.player().state};
   })()`);
   assert.equal(result.reached, true, JSON.stringify(result));

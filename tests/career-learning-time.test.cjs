@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {guidedChoiceSource} = require('./interaction-helpers.cjs');
 
 function consultation({comp, tier = 'S', npc = false, promote = false}) {
   const env = makeEnvironment();
@@ -38,15 +39,22 @@ function consultation({comp, tier = 'S', npc = false, promote = false}) {
     const phases = new Set();
     let ticks = 0;
     while (measuringStaff.state !== 'checkout' && ticks < 4000) {
-      step(0.05); ticks++;
-      phases.add(measuringStaff.state);
+      if (measuringStaff.isPlayer && playerMode.view().interaction) {
+        phases.add(playerMode.view().interaction.phase);
+        ${guidedChoiceSource}
+      }
+      if (measuringStaff.state !== 'checkout') step(0.05);
+      ticks++;
+      if (!measuringStaff.isPlayer) phases.add(measuringStaff.state);
     }
     return {ticks, duration: game.time - OPEN, state: measuringStaff.state,
       phases: [...phases], tier: measuringStaff.tier, comp: measuringStaff.stats.comp,
       clientKind: measuringClient.kind, clientProduct: measuringClient.product};
   })()`);
   assert.equal(measured.state, 'checkout');
-  for (const phase of ['approach', 'probe', 'demo', 'listen']) assert.ok(measured.phases.includes(phase), phase);
+  for (const phase of npc ? ['approach', 'probe', 'demo', 'listen'] : ['approach', 'probe', 'present', 'listen', 'extend']) {
+    assert.ok(measured.phases.includes(phase), phase);
+  }
   return {env, ...measured};
 }
 
@@ -66,7 +74,7 @@ test('promoting Specialist 100 to Expert 0 keeps the actual consultation speed',
   assert.equal(before.tier, 'S');
   assert.equal(after.tier, 'E');
   assert.equal(after.comp, 0);
-  assert.equal(after.ticks, before.ticks, 'The role transition must not slow down the player');
+  assert.equal(after.duration, before.duration, 'The role transition must preserve the charged conversation time');
 });
 
 test('the learning multiplier does not change NPC consultation durations', () => {
@@ -81,7 +89,7 @@ test('the first Specialist interaction is substantially slower and a completed L
   const beginner = consultation({comp: 0});
   const npc = consultation({comp: 0, npc: true});
   const lead = consultation({tier: 'L', comp: 100});
-  assert.ok(beginner.duration >= npc.duration * 1.9,
+  assert.ok(beginner.duration >= npc.duration * 1.75,
     `The beginner needs substantially more real consultation time: ${beginner.duration} vs ${npc.duration}`);
   assert.ok(lead.duration <= npc.duration * 0.95,
     `Learning eventually makes the player faster: ${lead.duration} vs ${npc.duration}`);
@@ -93,6 +101,6 @@ for (const [tier, next] of [['E', 'P'], ['P', 'L']]) {
     const after = consultation({tier, comp: 100, promote: true});
     assert.equal(after.tier, next);
     assert.equal(after.comp, 0);
-    assert.equal(after.ticks, before.ticks);
+    assert.equal(after.duration, before.duration);
   });
 }

@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {guidedChoiceSource, chooseGuided} = require('./interaction-helpers.cjs');
 const CAREER_KEY = 'plgame.career.v1';
 const plain = value => JSON.parse(JSON.stringify(value));
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9,
@@ -48,7 +49,10 @@ function client(env, extra = {}) {
 function until(env, condition, minutes = 120) {
   const result = env.evaluate(`(() => {
     let ticks = 0;
-    while (!(${condition}) && !game.over && ticks++ < ${Math.ceil(minutes / 0.05)}) step(0.05);
+    while (!(${condition}) && !game.over && ticks++ < ${Math.ceil(minutes / 0.05)}) {
+      ${guidedChoiceSource}
+      step(0.05);
+    }
     return {reached: Boolean(${condition}), state: playerMode.player().state, time: game.time};
   })()`);
   assert.equal(result.reached, true, JSON.stringify(result));

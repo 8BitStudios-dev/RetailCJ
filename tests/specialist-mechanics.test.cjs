@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {guidedChoiceSource, chooseGuided} = require('./interaction-helpers.cjs');
 
 test('customer profiles favour low familiarity, low hurry and good mood independently for sales and support', () => {
   const env = ready();
@@ -108,10 +109,13 @@ test('a sales consultation traverses all five ASOS phases before delivery', () =
   customer(env, {familiarity: 0, hurry: 0, mood: 80});
   env.mode().takeNext();
   assert.equal(env.view().phase, 'approach');
-  for (const [state, phase] of [['probe', 'probe'], ['demo', 'present'], ['listen', 'listen'], ['checkout', 'extend']]) {
-    until(env, `playerMode.player().state === '${state}'`);
+  until(env, "playerMode.player().state === 'interaction'");
+  for (const phase of ['approach', 'probe', 'present', 'listen', 'extend']) {
+    assert.equal(env.mode().player().state, 'interaction');
+    assert.equal(env.view().interaction.phase, phase);
     assert.equal(env.view().phase, phase);
     assert.equal(env.view().stats.sales, 0);
+    assert.equal(chooseGuided(env), true, 'The player explicitly answers each ASOS question');
   }
   const stages = env.get('playerPanel').querySelectorAll('.playerStep');
   assert.deepEqual(Array.from(stages, s => s.textContent), ['Approach', 'Probe', 'Present', 'Listen', 'Extend']);
@@ -123,7 +127,7 @@ test('a sales consultation traverses all five ASOS phases before delivery', () =
 function ready(options = {}) {
   const env = makeEnvironment(options);
   env.evaluate(`
-    startDay();
+    window.__sim.closeModes(); startDay();
     game.arrivals = []; game.sessions = []; game.customers = [];
     game.lineIn = []; game.lineGB = []; game.lineEx = [];
     game.time = OPEN; game.weather = 'sole';
@@ -158,6 +162,7 @@ function until(env, condition, maxMinutes = 120) {
   const result = env.evaluate(`(() => {
     let ticks = 0;
     while (!(${condition}) && !game.over && ticks < ${Math.ceil(maxMinutes / 0.05)}) {
+      ${guidedChoiceSource}
       step(0.05); ticks++;
     }
     return {reached: Boolean(${condition}), ticks, time: game.time,
@@ -463,11 +468,12 @@ test('a delivered purchase with unfinished setup remains a sale but not a comple
 
 test('a whole Specialist shift reaches 14:00 without old leader, role or checkpoint overlays blocking it', () => {
   const env = makeEnvironment({seed: 0x5eed});
-  env.evaluate('startDay()');
+  env.evaluate('window.__sim.closeModes(); startDay()');
   const result = env.evaluate(`(() => {
     let ticks = 0;
     while (!game.over && ticks++ < 4000) {
       if (playerMode.view().canNext) playerMode.takeNext();
+      ${guidedChoiceSource}
       step(0.25);
       if (game.moment || game.planning || game.checkpoint) break;
     }

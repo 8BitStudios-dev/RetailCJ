@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
+const {guidedChoiceSource, chooseGuided} = require('./interaction-helpers.cjs');
 
 const CAREER_KEY = 'plgame.career.v1';
 const contracts = [
@@ -52,6 +53,7 @@ for (const {tier, weeklyHours, hours, end} of contracts) {
       while (!game.over && ticks++ < 4000) {
         if (playerMode.view().canNext) playerMode.takeNext();
         if (playerMode.player().needsBreak && playerMode.view().canPause) playerMode.requestBreak();
+        ${guidedChoiceSource}
         step(0.25);
       }
       return {over: game.over, time: game.time, day: game.day};
@@ -104,7 +106,10 @@ test('personal shift ending leaves undelivered orders and NPC visits untouched w
   env.mode().takeNext();
   const reached = env.evaluate(`(() => {
     let ticks = 0;
-    while (playerMode.player().state !== 'waitProduct' && ticks++ < 2400) step(0.05);
+    while (playerMode.player().state !== 'waitProduct' && ticks++ < 2400) {
+      ${guidedChoiceSource}
+      step(0.05);
+    }
     return playerMode.player().state === 'waitProduct';
   })()`);
   assert.equal(reached, true);

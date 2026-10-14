@@ -38,6 +38,34 @@
 .playerStep { padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 10px; }
 .playerStep.isDone { color: var(--good); border-color: #37563d; }
 .playerStep.isCurrent { color: #fff; background: var(--accent); border-color: var(--accent); }
+.playerInteraction { min-width: 0; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.playerInteractionHeader { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; }
+.playerInteractionPhase { color: #bdd5ff; font-size: 12px; line-height: 1.4; }
+.playerDecisionTimer { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.playerDecisionTimer.isNearEnd { color: #ffd6a8; }
+.playerSpeaker { margin-top: 10px; color: var(--muted); font-size: 11px; }
+.playerSpeech { margin: 5px 0 0; color: var(--text); font-size: 16px; line-height: 1.55; overflow-wrap: anywhere; }
+.playerCue { margin: 7px 0 0; color: #c6d0df; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.playerLeadHint { margin: 10px 0 0; padding: 8px 10px; border-left: 3px solid #86b7fb; border-radius: 0 4px 4px 0; background: #27384f; color: #d8e8ff; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.playerChoices { display: grid; gap: 8px; min-width: 0; margin-top: 12px; }
+.playerChoice { display: block; width: 100%; min-width: 0; min-height: 64px; padding: 11px 12px; border: 1px solid #5d6b82; border-radius: 7px; background: #2d3544; color: var(--text); font-family: inherit; text-align: left; white-space: normal; cursor: pointer; }
+.playerChoice:not(:disabled):hover { border-color: #a8c8ff; background: #354761; }
+.playerChoice:not(:disabled):active { background: #405779; }
+.playerChoice:disabled { opacity: .62; cursor: default; }
+.playerChoice.isRecommended { border-color: #86b7fb; }
+.playerChoiceHeading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; min-width: 0; }
+.playerChoiceLabel { flex: 1 1 220px; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.playerChoiceMinutes { flex: 0 0 auto; color: #c5d3e8; font-size: 11px; line-height: 1.45; white-space: nowrap; }
+.playerChoiceDetail { display: block; margin-top: 4px; color: #c6d0df; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.playerChoiceRecommendation { display: inline-block; margin-top: 6px; padding: 2px 5px; border-radius: 3px; background: #365477; color: #e5f0ff; font-size: 10px; line-height: 1.35; }
+.playerChoiceFootnote { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.playerInteractionFeedback { margin-top: 12px; padding: 9px 10px; border: 1px solid #456357; border-radius: 5px; background: #253a31; color: #d4eadb; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.playerInteractionResult { margin-top: 14px; padding: 12px; border: 1px solid #6a8a77; border-radius: 6px; background: #253a31; }
+.playerResultTitle { display: block; color: #def1e3; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.playerResultMeta { margin-top: 4px; color: #c8ddce; font-size: 12px; line-height: 1.4; }
+.playerResultFeedback { margin: 9px 0 0; padding-left: 18px; color: #d4eadb; font-size: 13px; line-height: 1.5; }
+.playerResultFeedback li + li { margin-top: 5px; }
+.playerResultFeedback li { overflow-wrap: anywhere; }
 .playerMetrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
 .playerMetric { min-width: 0; text-align: center; }
 .playerMetric strong { display: block; font-size: 20px; line-height: 1.15; }
@@ -76,4 +104,12 @@
   .playerCareerHint { font-size: 11px; }
   .playerEnergyBadge { font-size: 10px; }
   .playerDescription, .playerQueue, .playerMessage { font-size: 12px; }
+  .playerInteraction { margin-top: 11px; padding-top: 10px; }
+  .playerSpeech { font-size: 15px; }
+  .playerCue, .playerLeadHint, .playerChoiceDetail { font-size: 13px; }
+  .playerChoices { gap: 7px; margin-top: 10px; }
+  .playerChoice { min-height: 70px; padding: 10px; }
+  .playerChoiceHeading { gap: 4px 8px; }
+  .playerChoiceLabel { flex-basis: 180px; }
+  .playerChoiceMinutes { font-size: 10px; }
 }
