@@ -1081,8 +1081,22 @@ function proceed(c) {
 function lookAround(c) {
   const t = pick(TABLES);
   const left = Math.random() < 0.5;
+  c.browsingProduct = t.product;
+  c.browsingTable = t.name;
   c.state = 'toLook';
   goTo(c, { x: left ? t.x - 24 : t.x + t.w + 24, y: t.y + rand(30, t.h - 30) });
+}
+
+function prepareBrowser(c, code) {
+  const products = ['iphone', 'ipad', 'watch', 'mac'];
+  const nearby = TABLES.filter(table => products.includes(table.product))
+    .sort((a, b) => Math.hypot(c.x - a.x - a.w / 2, c.y - a.y - a.h / 2) -
+      Math.hypot(c.x - b.x - b.w / 2, c.y - b.y - b.h / 2))[0];
+  const product = products.includes(c.product) ? c.product : products.includes(c.browsingProduct) ? c.browsingProduct : nearby.product;
+  c.product = product;
+  if (!c.need) c.need = NEEDS[product][code % NEEDS[product].length];
+  if (c.kind === 'look') game.stats.buyers++;
+  c.kind = 'buy'; c.fast = false;
 }
 
 function afterLooking(c) {
@@ -1580,7 +1594,7 @@ const REPAIR_NAME = ['rapida', 'media', 'complessa'];
 const BUSY = new Set(['waitHelp', 'toHelp', 'assist', 'toAccWall', 'atAccWall', 'backToTable', 'tradeOnly', 'toBack', 'picking', 'delivering', 'handing', 'probe', 'demo', 'checkout', 'repair', 'advise', 'listening', 'escort', 'presenting', 'toCustomer', 'toWallCustomer', 'toBar']);
 // Point ed Express stressano più della vendita e degli accessori
 const ROLE_STRESS = { point: 1.3, express: 1.3, specialist: 1, accessori: 0.9, genius: 0.8, creative: 0.8, ops: 1 };
-BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen'); BUSY.add('interaction');
+BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen'); BUSY.add('interaction'); BUSY.add('toBrowser');
 const SUPPORT_PHASES = new Set(['probe', 'listen', 'helping', 'advise', 'repair']);
 function requestExpert(s, c) {
   if (s.isPlayer && c && c.interactionControlled) return;
@@ -1688,6 +1702,9 @@ function updateStaff(s, dt) {
       break;
     case 'wander':
       if (arrived) { s.state = 'idle'; s.t = s.role === 'lead' ? rand(1, 3) : rand(3, 9); if (s.role === 'lead' && Math.random() < 0.4) say(s, 'eye', 1.5); }
+      break;
+    case 'toBrowser':
+      if (arrived && s.isPlayer && playerMode) playerMode.arriveAtBrowser(c);
       break;
     case 'toWallCustomer':
       if (!c || c.state !== 'waitWall') { s.customer = null; s.state = 'idle'; s.t = 1; break; }
@@ -2543,6 +2560,7 @@ function render(realDt = 0) {
 // ─────────────────────────────────────────────────────────────
 const rows = list => list.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
 const STATE_LABEL = {
+  toBrowser: 'si avvicina per offrire aiuto a un visitatore', engaging: 'riceve un invito a una consulenza',
   interaction: 'conversa con il cliente · scegli nel pannello',
   approach: 'accoglie il cliente · Approach', listen: 'ascolta dubbi e verifica la soluzione · Listen',
   toExpert: 'raggiunge una persona esperta', expertAdvice: 'chiede un consiglio', fromExpert: 'torna dal cliente',
@@ -2764,12 +2782,16 @@ function createPlayerMode() {
   return window.PLPlayerMode.create({
     getGame: () => game, OPEN, CLOSE, TEAM, PRODUCT_NAME, STATE_LABEL, goTo, isAvailable, onBreak, serve, log, rand, bump,
     canInteract: () => !modePicking && !intro.on,
+    canTakeCustomer: () => floorReady && !modePicking && !intro.on && game.speed > 0,
+    prepareBrowser, face,
     workInteraction, finishInteraction,
   });
 }
 let playerMode = SPECIALIST_ON ? createPlayerMode() : null;
 window.PLSpecialistUI.bind({
   next: () => { careerPromotionNotice = ''; if (playerMode) playerMode.takeNext(); updatePanel(); },
+  engage: () => { careerPromotionNotice = ''; const c = playerMode && playerMode.engageBrowser(); updatePanel(); return Boolean(c); },
+  setAutoNext: enabled => { const value = playerMode ? playerMode.setAutoNext(enabled) : false; updatePanel(); return value; },
   pause: () => { careerPromotionNotice = ''; if (playerMode) playerMode.requestBreak(); updatePanel(); },
   focus: () => { if (playerMode) { playerMode.focus(); if (window.PLFloorViewUI) window.PLFloorViewUI.followPlayer(); } updatePanel(); },
   promote: promoteCareer,

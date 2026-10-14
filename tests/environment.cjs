@@ -117,8 +117,34 @@ function makeEnvironment(options = {}) {
       if (name === 'disabled') this.disabled = false;
       if (name === 'open') this.open = false;
     }
-    appendChild(element) { element.parentElement = this; this.children.push(element); return element; }
-    prepend(element) { element.parentElement = this; this.children.unshift(element); }
+    appendChild(element) {
+      if (element.parentElement) {
+        element.parentElement.children = element.parentElement.children.filter(child => child !== element);
+      }
+      element.parentElement = this;
+      this.children.push(element);
+      return element;
+    }
+    insertBefore(element, reference) {
+      if (reference !== null && reference !== undefined && reference.parentElement !== this) {
+        throw new Error('The reference node is not a child of this element');
+      }
+      if (element === reference) return element;
+      if (element.parentElement) {
+        element.parentElement.children = element.parentElement.children.filter(child => child !== element);
+      }
+      const index = reference ? this.children.indexOf(reference) : this.children.length;
+      element.parentElement = this;
+      this.children.splice(index, 0, element);
+      return element;
+    }
+    prepend(element) {
+      if (element.parentElement) {
+        element.parentElement.children = element.parentElement.children.filter(child => child !== element);
+      }
+      element.parentElement = this;
+      this.children.unshift(element);
+    }
     append(...items) { items.filter(item => typeof item === 'object').forEach(item => this.appendChild(item)); }
     replaceChildren(...items) { this.children = []; this.append(...items); }
     remove() {

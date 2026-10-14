@@ -117,7 +117,7 @@ test('3D boots automatically and ignores an old 2D preference without changing p
     const saved = storage(view);
     const entries = [...saved];
     const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: specifier => {
-      imports++; assert.equal(specifier, './renderer-3d.js?v=2.2.1');
+      imports++; assert.equal(specifier, './renderer-3d.js?v=2.3.0');
       return Promise.resolve(fixture.module);
     }});
     assert.equal(await env.context.PLFloorViewUI.ready, true);
@@ -156,11 +156,11 @@ test('the page keeps game commands above the floor and its compact camera bar di
   const assets = [...env.html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi)]
     .map(match => match[1]).filter(url => !/^(?:https?:)?\/\//.test(url));
   for (const asset of assets) {
-    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.2.1', asset);
+    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.3.0', asset);
     assert.equal(fs.existsSync(path.join(gameDirectory, asset.split('?')[0])), true, asset);
   }
   const floorPosition = env.html.indexOf('id="floor3d"');
-  for (const id of ['gameControls', 'playerCommands', 'observationControls']) {
+  for (const id of ['gameControls', 'observationControls']) {
     assert.ok(env.get(id), id);
     assert.ok(env.html.indexOf('id="' + id + '"') < floorPosition, id + ' precedes the floor');
   }
@@ -173,7 +173,9 @@ test('the page keeps game commands above the floor and its compact camera bar di
   assert.equal(env.get('playerPanel').closest('#interactionPane'), env.get('interactionPane'),
     'The active interaction belongs to the main workspace beside the compact floor');
   env.context.__sim.selectMode('career');
-  for (const action of ['next', 'focus', 'pause']) {
+  assert.equal(env.get('playerCommands').closest('#playerPanel'), env.get('playerPanel'),
+    'Personal commands belong to the current interaction workspace');
+  for (const action of ['next', 'focus', 'pause', 'engage']) {
     const button = doc.querySelector('[data-specialist-action="' + action + '"]');
     assert.ok(button, action);
     assert.equal(button.closest('#playerCommands'), env.get('playerCommands'));

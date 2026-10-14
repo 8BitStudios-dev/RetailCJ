@@ -97,10 +97,29 @@
     promote.id = 'careerPromote';
     promote.setAttribute('aria-describedby', 'careerPromotionHint');
 
-    const queue = node('div', 'playerQueue', commands);
+    const queueSummary = node('div', 'playerQueueSummary', commands);
+    const queue = node('span', 'playerQueue', queueSummary);
+    const browsing = node('span', 'playerBrowsing', queueSummary);
     const controls = node('div', 'playerControls', commands);
-    const next = button(controls, 'next', 'Segui il prossimo cliente', 'playerNext on');
+    const nextRow = node('div', 'playerNextRow', controls);
+    const next = button(nextRow, 'next', 'Segui il prossimo cliente', 'playerNext on');
+    const autoLabel = node('label', 'playerAutoNext', nextRow);
+    const autoNext = node('input', '', autoLabel);
+    autoNext.type = 'checkbox';
+    autoNext.id = 'playerAutoNext';
+    autoNext.dataset.specialistAutoNext = '';
+    autoNext.setAttribute('aria-label', 'Auto: vai al prossimo cliente in coda');
+    autoNext.setAttribute('aria-describedby', 'playerAutoNextHelp');
+    node('span', '', autoLabel, 'Auto');
+    const autoHelp = node('span', 'playerControlHint', commands,
+      'Con Auto segui la coda quando sei libero. Ingaggia resta manuale.');
+    autoHelp.id = 'playerAutoNextHelp';
+    autoNext.addEventListener('change', () => {
+      if (typeof actions.setAutoNext === 'function') actions.setAutoNext(Boolean(autoNext.checked));
+    });
     const secondary = node('div', 'playerSecondaryActions', controls);
+    const engage = button(secondary, 'engage', 'Ingaggia', 'playerEngage');
+    engage.setAttribute('aria-label', 'Ingaggia un cliente che sta esplorando');
     const focus = button(secondary, 'focus', 'Mostrami sul floor');
     const pause = button(secondary, 'pause', 'Pausa 15 min');
     [[next, 'Segui il prossimo cliente', 'Prossimo cliente'], [focus, 'Mostrami sul floor', 'Seguimi'],
@@ -112,6 +131,7 @@
     });
 
     const current = node('div', 'playerCurrent', root);
+    root.insertBefore(commands, current);
     const currentTitle = node('strong', 'playerCurrentTitle', current, 'Nessun cliente in corso');
     const description = node('div', 'playerDescription', current);
     const state = node('div', 'playerState', current);
@@ -173,12 +193,16 @@
       const detail = node('span', '', item);
       return { item, label, detail };
     });
+    choiceHelp.appendChild(choiceFootnote);
+    choiceHelp.appendChild(feedback);
     const result = node('section', 'playerInteractionResult', current);
     result.hidden = true;
     result.setAttribute('aria-label', 'Risultato della conversazione');
-    const resultTitle = node('strong', 'playerResultTitle', result);
-    const resultMeta = node('div', 'playerResultMeta', result);
-    const resultFeedback = node('ul', 'playerResultFeedback', result);
+    const resultDetails = node('details', 'playerResultDetails', result);
+    const resultSummary = node('summary', '', resultDetails);
+    const resultTitle = node('strong', 'playerResultTitle', resultSummary);
+    const resultMeta = node('span', 'playerResultMeta', resultSummary);
+    const resultFeedback = node('ul', 'playerResultFeedback', resultDetails);
     const resultRows = Array.from({ length: 2 }, () => node('li', '', resultFeedback));
     const visitHint = node('div', 'playerDescription', current, 'L’ascolto accompagna tutta la visita. Acquisto, servizi e Setup fanno parte del percorso.');
     const visitDetails = node('details', 'playerVisitDetails playerMobileDetails', current);
@@ -191,33 +215,48 @@
     const visitState = node('p', '', visitDetails);
     const visitStarted = node('p', '', visitDetails);
 
-    const metrics = node('div', 'playerMetrics', root);
+    const turnDetails = node('details', 'playerTurnDetails', root);
+    node('summary', '', turnDetails, 'Il turno e i tuoi progressi');
+    const turnAutoLabel = node('label', 'playerAutoNextSetting', turnDetails);
+    const turnAutoNext = node('input', '', turnAutoLabel);
+    turnAutoNext.type = 'checkbox';
+    turnAutoNext.id = 'playerTurnAutoNext';
+    turnAutoNext.setAttribute('aria-label', 'Auto coda nelle prossime visite');
+    node('span', '', turnAutoLabel, 'Auto coda nelle prossime visite');
+    turnAutoNext.addEventListener('change', () => {
+      if (typeof actions.setAutoNext === 'function') actions.setAutoNext(Boolean(turnAutoNext.checked));
+    });
+    turnDetails.appendChild(shift);
+    const metrics = node('div', 'playerMetrics', turnDetails);
     const stats = {};
     [['served', 'Clienti conclusi'], ['sales', 'Dispositivi consegnati'], ['open', 'Visite aperte']].forEach(([key, label]) => {
       const metric = node('div', 'playerMetric', metrics);
       stats[key] = node('strong', '', metric, '0');
       node('span', '', metric, label);
     });
-    const extraStats = node('div', 'playerExtraStats', root);
+    const extraStats = node('div', 'playerExtraStats', turnDetails);
 
     const energyRow = node('div', 'playerEnergy', root);
+    root.insertBefore(energyRow, turnDetails);
     const energy = {};
     [['motivation', 'Motivazione'], ['stress', 'Stress'], ['competence', 'Competenza']].forEach(([key, label]) => {
       const badge = node('span', 'playerEnergyBadge', energyRow);
       node('span', '', badge, label);
       energy[key] = node('b', '', badge, '0');
     });
-    const learning = node('div', 'playerLearning', root);
+    const learning = node('div', 'playerLearning', turnDetails);
     learning.id = 'playerLearning';
-    const factors = node('details', 'playerFactors', root);
+    const factors = node('details', 'playerFactors', turnDetails);
     node('summary', '', factors, 'I tre fattori');
     node('p', '', factors, 'Motivazione: clima della squadra, supporto dei colleghi e riconoscimento dei Lead.');
     node('p', '', factors, 'Stress: impegno sul floor ed errori. Pause e riposo aiutano a recuperare.');
     node('p', '', factors, 'Competenza: cresce lavorando e con la formazione. Lo stress riduce i nuovi punti appresi; la competenza acquisita resta.');
 
     const message = node('div', 'playerMessage', root);
+    message.setAttribute('role', 'status');
+    message.setAttribute('aria-live', 'polite');
 
-    const recent = node('div', 'playerRecent', root);
+    const recent = node('div', 'playerRecent', turnDetails);
     node('h3', '', recent, 'Ultimi clienti');
     const history = node('ol', 'playerHistory', recent);
     const historyRows = Array.from({ length: 3 }, () => {
@@ -233,8 +272,9 @@
       stages, interaction, interactionPhase, timer, speaker, speech, cue, leadHint, choiceRows, choiceFootnote, feedback,
       choiceHelp, helpCue, helpLead, explanationRows, visitDetails, visitIdentity, visitStatus, visitShift,
       visitDescription, visitState, visitStarted, result, resultTitle, resultMeta, resultRows, visitHint, submittedToken: null,
-      stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
-    for (const container of [root, commands]) {
+      current, stats, extraStats, energy, queue, browsing, next, autoNext, engage, focus, pause,
+      turnDetails, turnAutoNext, message, recent, historyRows };
+    for (const container of [root]) {
       container.addEventListener('click', event => {
         const choiceControl = event.target.closest('button[data-specialist-choice]');
         if (choiceControl && container.contains(choiceControl)) {
@@ -316,6 +356,7 @@
     }
     const active = view.active;
     r.root.classList.toggle('hasClient', Boolean(active));
+    r.current.hidden = !active && !view.lastInteraction;
     if (active) {
       const id = active.id === undefined || active.id === null ? '' : ' #' + active.id;
       setText(r.currentTitle, 'Cliente' + id + (active.productLabel ? ' · ' + active.productLabel : ''));
@@ -323,8 +364,8 @@
       setText(r.state, active.stateLabel || view.phase || 'In corso');
       setText(r.started, active.startedAt ? 'Iniziato alle ' + active.startedAt : '');
     } else {
-      setText(r.currentTitle, view.isOver ? 'Il turno è concluso' : 'Nessun cliente in corso');
-      setText(r.description, view.isOver ? 'Ritrovi qui i risultati del tuo turno.' : 'Quando sei disponibile, segui una persona in attesa.');
+      setText(r.currentTitle, view.isOver ? 'Il turno è concluso' : view.lastInteraction ? 'Ultima conversazione' : 'Pronto sul floor');
+      setText(r.description, view.isOver ? 'Ritrovi qui i risultati del tuo turno.' : '');
       setText(r.state, '');
       setText(r.started, '');
     }
@@ -446,12 +487,19 @@
 
     const waiting = count(view.waiting);
     setText(r.queue, view.isOver ? 'Turno concluso' : waiting === 1 ? '1 persona in attesa' : waiting + ' persone in attesa');
+    const browsers = count(view.browsing);
+    setText(r.browsing, browsers === 1 ? '1 visitatore disponibile' : browsers + ' visitatori disponibili');
+    r.autoNext.checked = Boolean(view.autoNext);
+    r.autoNext.disabled = Boolean(view.isOver);
+    r.turnAutoNext.checked = Boolean(view.autoNext);
+    r.turnAutoNext.disabled = Boolean(view.isOver);
     r.next.disabled = !view.canNext || Boolean(view.isOver);
+    r.engage.disabled = !view.canEngage || Boolean(view.isOver);
     r.pause.disabled = !view.canPause || Boolean(view.isOver);
     r.focus.disabled = !view.enabled;
-    setText(r.message, view.message);
+    setText(r.message, view.engagement && view.engagement.message || view.message);
     r.message.hidden = !r.message.textContent || r.message.textContent === r.feedback.textContent
-      || Boolean(conversation && normalizedLine(r.message.textContent) === normalizedLine(conversation.speech));
+      || Boolean(conversation);
 
     const recent = Array.isArray(view.history) ? view.history.slice(0, 3) : [];
     r.recent.hidden = recent.length === 0;

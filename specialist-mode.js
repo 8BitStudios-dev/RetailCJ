@@ -7,6 +7,11 @@
   const HOME = Object.freeze({ x: 900, y: 330 });
   const LOOK = Object.freeze({ skin: '#e0ac85', hair: '#3b251e', shirt: '#2a6ad8', pants: '#23232b' });
   const AFTER_HANDOVER = new Set(['toSetup', 'setup', 'waitTrade', 'tradeOnly']);
+  const AUTO_NEXT_KEY = 'plgame.career.auto-next.v1';
+
+  function savedAutoNext() {
+    try { return root.localStorage.getItem(AUTO_NEXT_KEY) === 'true'; } catch { return false; }
+  }
 
   root.PLPlayerMode = {
     create(api) {
@@ -21,6 +26,10 @@
       let interactionCustomer = null;
       let lastInteraction = null;
       let workingChoice = false;
+      let autoNext = savedAutoNext();
+      let engagement = null;
+      let invitedCustomer = null;
+      let browserResume = null;
 
       function freshTotals() {
         return { served: 0, sales: 0, accessories: 0, services: 0, helped: 0, setups: 0 };
@@ -50,6 +59,8 @@
         return api.PRODUCT_NAME[c.product] || 'Prodotto';
       }
       function describe(c) {
+        if (c.kind === 'look') return 'Una persona sta dando un’occhiata ai prodotti. Puoi offrirle aiuto, rispettando la sua risposta.';
+        if (c.engagedBrowser && !c.engagementPurchaseReady) return 'Ha accettato il confronto per esplorare il prodotto; per ora non ha deciso di acquistare.';
         if (c.tradeOnly) return 'Permuta del dispositivo dopo il trasferimento dei dati.';
         if (c.kind === 'help') return 'Una persona ha una domanda sul suo prodotto.';
         if (c.kind === 'acc') return 'Una persona cerca un consiglio sugli accessori.';
@@ -105,6 +116,99 @@
         if (!g) return;
         g.customers.forEach(c => { if (c !== keep && c.playerReserved) delete c.playerReserved; });
       }
+      function browsers(g) {
+        if (!g || !Array.isArray(g.customers)) return [];
+        return g.customers.filter(c => c.kind === 'look' && ['looking', 'toLook'].includes(c.state) &&
+          !c.gone && !c.outcome && !c.staff && !c.ownerId && !c.isStaff &&
+          !(c.browserInvitationTried && (!Number.isFinite(c.browserInvitationUntil) || g.time < c.browserInvitationUntil)) &&
+          !c.bought && !c.saleCounted && !c.tradeOnly && !c.setup && pending(c) === 0);
+      }
+      function liveCustomerActions() {
+        const g = game();
+        return Boolean(running(g) && g.speed > 0 && !workingChoice && !hasChoice() && canInteract() &&
+          (!api.canTakeCustomer || api.canTakeCustomer()));
+      }
+      function setAutoNext(enabled) {
+        autoNext = Boolean(enabled);
+        try { root.localStorage.setItem(AUTO_NEXT_KEY, String(autoNext)); } catch { /* Preference remains usable in memory. */ }
+        return autoNext;
+      }
+      function visitorCode(c) {
+        const numeric = Number(c.id);
+        if (Number.isFinite(numeric)) return Math.abs(Math.floor(numeric));
+        return Array.from(String(c.id)).reduce((sum, letter) => (Math.imul(sum, 31) + letter.charCodeAt(0)) >>> 0, 0);
+      }
+      function releaseInvitation(c) {
+        if (c && !c.gone && !c.outcome && c.state === 'engaging') {
+          c.state = browserResume ? browserResume.state : 'looking';
+          c.t = browserResume ? browserResume.t : 2;
+          c.path = browserResume ? browserResume.path : [];
+        }
+        if (c && c.staff === entity) c.staff = null;
+        if (entity && (entity.customer === c || entity.state === 'toBrowser')) {
+          entity.customer = null; entity.state = 'idle'; entity.t = Infinity;
+        }
+        invitedCustomer = null;
+        browserResume = null;
+      }
+      function engageBrowser() {
+        const g = game();
+        if (!liveCustomerActions() || !available()) return null;
+        const eligible = browsers(g);
+        const selected = eligible.find(c => c === g.selected);
+        const c = selected || eligible.sort((a, b) => Math.hypot(a.x - entity.x, a.y - entity.y) -
+          Math.hypot(b.x - entity.x, b.y - entity.y) || visitorCode(a) - visitorCode(b))[0];
+        if (!c) { message = 'Al momento non ci sono visitatori disponibili per un invito.'; return null; }
+        clearReservations(g);
+        lastInteraction = null;
+        c.browserInvitationTried = true;
+        c.browserInvitationUntil = g.time + 15;
+        browserResume = { state: c.state, t: c.t, path: (c.path || []).map(point => ({ ...point })) };
+        invitedCustomer = c;
+        c.state = 'engaging'; c.path = []; c.staff = entity;
+        entity.customer = c; entity.state = 'toBrowser'; entity.t = Infinity;
+        const direction = c.facing === 'right' ? -1 : c.facing === 'left' ? 1 : (entity.x < c.x ? -1 : 1);
+        api.goTo(entity, { x: c.x + direction * 28, y: c.y + 18 });
+        message = `Ti avvicini al visitatore #${c.id} per offrire aiuto, senza interrompere la sua scelta.`;
+        engagement = { id: c.id, status: 'approaching', message };
+        api.log(`Tu ti avvicini al visitatore #${c.id} e chiedi se desidera un confronto`);
+        return c;
+      }
+      function arriveAtBrowser(c) {
+        if (!c || c !== invitedCustomer || !entity || entity.customer !== c || c.staff !== entity ||
+            c.gone || c.outcome || c.state !== 'engaging') {
+          releaseInvitation(invitedCustomer);
+          engagement = null;
+          message = 'Il visitatore non è più disponibile per questo invito. Puoi seguire un’altra persona.';
+          return false;
+        }
+        if (!liveCustomerActions()) return false;
+        const code = visitorCode(c);
+        const accepts = code % 5 !== 0 && !(c.hurry === 2 && code % 5 === 1);
+        if (!accepts) {
+          message = `Il visitatore #${c.id} preferisce continuare a guardare da solo. Rispetti la sua scelta: nessun cliente perso.`;
+          engagement = { id: c.id, status: 'declined', message };
+          api.log(`Il visitatore #${c.id} declina l’aiuto e continua a guardare i prodotti`);
+          releaseInvitation(c);
+          return true;
+        }
+        api.prepareBrowser(c, code);
+        c.engagedBrowser = true;
+        c.engagementPurchaseReady = code % 3 !== 0;
+        c.ownerId = PLAYER_ID;
+        track(c, true);
+        invitedCustomer = null; browserResume = null;
+        c.state = 'served';
+        beginInteraction(c);
+        api.serve(entity, c);
+        if (api.face) { api.face(entity, c); api.face(c, entity); }
+        message = c.engagementPurchaseReady ?
+          `Il visitatore #${c.id} accetta il confronto. Scopri il suo bisogno prima di proporre una soluzione.` :
+          `Il visitatore #${c.id} accetta una consulenza, ma oggi sta esplorando: una buona esperienza può concludersi senza acquisto.`;
+        engagement = { id: c.id, status: 'accepted', message };
+        api.log(`Il visitatore #${c.id} accetta una consulenza con te`);
+        return true;
+      }
       function reserveNext() {
         const g = game();
         if (!running(g) || !available()) { clearReservations(g); return null; }
@@ -123,6 +227,9 @@
         interactionCustomer = null;
         lastInteraction = null;
         workingChoice = false;
+        engagement = null;
+        invitedCustomer = null;
+        browserResume = null;
         message = 'Segui una persona in attesa quando sei disponibile.';
         const team = api.TEAM;
         if (!team[NAME]) team[NAME] = { tier: 'S', mot: 65, stress: 20, comp: 0, cap: 100, off: [], vacWeek: -1 };
@@ -156,6 +263,7 @@
         if (!c) { message = 'Non ci sono persone in attesa da prendere in carico.'; return null; }
         const alreadyPersonal = personal(c);
         lastInteraction = null;
+        engagement = null;
         c.ownerId = PLAYER_ID;
         delete c.playerReserved;
         track(c, alreadyPersonal ? undefined : c.kind === 'buy' && !c.bought && !c.saleCounted && !c.tradeOnly);
@@ -196,6 +304,7 @@
       function applyAnswer(answer) {
         if (!answer || !answer.accepted || workingChoice) return false;
         const session = interaction, c = interactionCustomer;
+        engagement = null;
         workingChoice = true;
         try { api.workInteraction(answer.minutes); } finally { workingChoice = false; }
         // Closing a shift can interrupt an action. Never complete or sell from an abandoned session.
@@ -203,6 +312,10 @@
         message = answer.feedback;
         if (session.complete) {
           const result = session.result;
+          if (c.engagedBrowser && !c.engagementPurchaseReady) {
+            result.purchase = false;
+            result.feedback = [result.feedback[0], 'Una consulenza utile può concludersi senza un acquisto: il cliente era qui per esplorare.'];
+          }
           lastInteraction = {
             feedback: result.feedback.slice(0, 2), minutes: result.minutes, decisions: result.decisions,
             reply: answer.feedback,
@@ -328,6 +441,8 @@
           record.closedAt = game().time;
         });
         closing = true;
+        if (invitedCustomer) releaseInvitation(invitedCustomer);
+        engagement = null;
         interaction = null;
         interactionCustomer = null;
         clearReservations(game());
@@ -338,15 +453,16 @@
         if (!g || !entity || closing) return;
         records.forEach(record => { if (!record.closed) sync(record); });
         requireRest();
-        // Free time never starts an automatic conversation or changes the player's position.
+        // Auto handles the service queue only. Invitations to browsers always need a click.
         if (entity.state === 'idle' && !entity.customer) entity.t = Infinity;
         reserveNext();
+        if (autoNext && dt > 0 && liveCustomerActions() && available() && candidates(g).length) takeNext();
       }
       function phase(s) {
         if (!s) return 'idle';
         if (hasChoice()) return interaction.view().phase;
         const state = s.expertHelp ? s.expertHelp.resume : s.state;
-        if (['toCustomer', 'toWallCustomer', 'approach'].includes(state)) return 'approach';
+        if (['toBrowser', 'toCustomer', 'toWallCustomer', 'approach'].includes(state)) return 'approach';
         if (state === 'probe') return 'probe';
         if (['demo', 'helping', 'advise'].includes(state)) return 'present';
         if (state === 'listen') return 'listen';
@@ -354,6 +470,7 @@
         return 'idle';
       }
       function stateLabel(s) {
+        if (s.state === 'toBrowser') return 'Ti avvicini per offrire aiuto al visitatore';
         if (hasChoice()) return 'Scegli come proseguire · ' + interaction.view().phaseLabel;
         if (s.state === 'checkout' && s.bubble) {
           if (s.bubble.icon === 'trade') return 'Valuti il dispositivo per il Trade In';
@@ -402,6 +519,9 @@
           needsBreak: Boolean(s && s.needsBreak), status, phase: followUp ? 'extend' : phase(s),
           interaction: hasChoice() ? interaction.view() : null,
           interactionEnabled: canInteract(), lastInteraction,
+          autoNext, browsing: browsers(g).length,
+          canEngage: Boolean(liveCustomerActions() && available() && browsers(g).length),
+          engagement: engagement ? { ...engagement } : null,
           active: c ? { id: c.id, productLabel: productLabel(c), description: describe(c),
             stateLabel: followUp ? labels()[c.state] || 'Il cliente continua la visita dopo la consegna' : stateLabel(s),
             startedAt: clock(record ? record.startedAt : g.time), needsSetup: Boolean(c.setup) } : null,
@@ -413,6 +533,7 @@
       }
       return { newDay, step, takeNext, reserveNext, requestBreak, recordError, completeBreak, shiftEnd, focus, promote, view, recordLeave, beforeClose,
         beginInteraction, chooseInteraction, tickChoice, hasChoice,
+        setAutoNext, engageBrowser, arriveAtBrowser,
         player: () => entity, owns };
     },
   };

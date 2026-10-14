@@ -1,0 +1,377 @@
+/* Shared surface and typography for the live floor, its controls and dialogs.
+   Kept last in the cascade so the simulation and the native details stay intact. */
+:root {
+  color-scheme: light dark;
+  --bg: #edf2f8;
+  --panel: rgba(249, 252, 255, .88);
+  --line: rgba(96, 121, 151, .23);
+  --text: #1a293e;
+  --muted: #56677d;
+  --accent: #086fdc;
+  --good: #287450;
+  --bad: #bc493c;
+  --glass-solid: #f7faff;
+  --glass-raised: #fff;
+  --glass-soft: #edf3fa;
+  --glass-blue: #e4efff;
+  --glass-green: #e8f4ed;
+  --glass-warm: #fff0d9;
+  --glass-warning: #8c5b17;
+  --glass-shine: rgba(255, 255, 255, .95);
+  --glass-tint: rgba(238, 246, 255, .76);
+  --glass-scrim: rgba(31, 48, 72, .30);
+  --glass-sky: rgba(178, 210, 247, .36);
+  --glass-sand: rgba(228, 210, 187, .28);
+  --glass-shadow: 0 8px 26px rgba(44, 69, 104, .10);
+  --glass-shadow-raised: 0 18px 48px rgba(36, 58, 91, .15);
+  --on-accent: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151f2d;
+    --panel: rgba(35, 49, 69, .90);
+    --line: rgba(159, 181, 210, .24);
+    --text: #edf3fd;
+    --muted: #b5c4d8;
+    --accent: #72b5ff;
+    --good: #99d6b2;
+    --bad: #ffa395;
+    --glass-solid: #25344a;
+    --glass-raised: #2d3d54;
+    --glass-soft: #293b53;
+    --glass-blue: #29496f;
+    --glass-green: #263f38;
+    --glass-warm: #473c2c;
+    --glass-warning: #f2cf94;
+    --glass-shine: rgba(217, 234, 255, .14);
+    --glass-tint: rgba(50, 71, 98, .66);
+    --glass-scrim: rgba(5, 12, 25, .58);
+    --glass-sky: rgba(56, 94, 142, .30);
+    --glass-sand: rgba(109, 85, 72, .18);
+    --glass-shadow: 0 8px 26px rgba(3, 10, 23, .23);
+    --glass-shadow-raised: 0 18px 48px rgba(2, 8, 20, .38);
+    --on-accent: #102944;
+  }
+}
+
+html, body {
+  font: 400 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+body {
+  background-image: radial-gradient(ellipse at 8% 0%, var(--glass-sky), transparent 54%),
+    radial-gradient(ellipse at 98% 70%, var(--glass-sand), transparent 58%);
+  min-height: 100svh;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { min-height: 44px; padding: 8px 12px; border-radius: 14px; border-color: var(--line); background: var(--glass-soft); font-weight: 500; line-height: 1.3; }
+button.on, .introBox #careerWelcomeNext { color: var(--on-accent); background: var(--accent); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .23); }
+button:disabled { opacity: .45; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button:active:not(:disabled) { filter: brightness(.95); }
+input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+strong, b, .clock { font-variant-numeric: tabular-nums; }
+h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 600; color: var(--muted); }
+.sub, .mWhere, .ddDesc { color: var(--muted); }
+
+.box, .card, .introBox, .careerWelcome, .careerResume, .floorCameraBar {
+  background: linear-gradient(140deg, var(--panel), var(--glass-tint));
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 var(--glass-shine), var(--glass-shadow);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.box { padding: 13px; }
+.app { max-width: 1720px; gap: 12px; padding: 16px; }
+.controlsStack { gap: 8px; }
+.hud { padding: 9px 12px; }
+.hudRow { gap: 10px 18px; }
+.clock { font-size: 24px; font-weight: 600; letter-spacing: -.8px; line-height: 1.05; }
+.storeClock { min-width: 130px; }
+#date { margin-top: 3px; font-size: 11px; }
+#speed { gap: 2px; padding: 3px; border-radius: 17px; background: var(--glass-soft); }
+.hud #speed button { min-height: 40px; min-width: 36px; padding: 5px 8px; font-size: 13px; border: 0; border-radius: 13px; background: transparent; }
+.hud #speed button.on { background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 7px rgba(30, 68, 118, .15); }
+.hud #changeMode { min-height: 42px; padding: 7px 11px; border-radius: 14px; font-size: 12px; }
+#modeBadge { color: var(--accent); }
+.npsRow { gap: 4px 14px; font-size: 12px; }
+.npsRow .big { font-weight: 600; }
+.floorStatus { color: var(--muted); }
+.floorStatus:empty { display: none; }
+
+/* The scene and its camera bar form one surface. Camera buttons remain below
+   the canvas and never cover the customer or the on-screen choices. */
+.floorViewport { padding: 4px; border: 1px solid var(--line); border-radius: 26px; background: var(--panel); box-shadow: var(--glass-shadow); }
+.scroller { border: 0; border-radius: 21px; background: #d9e4e8; }
+#floor3d { border-radius: 21px; }
+.floorCameraBar { gap: 3px; margin: 0; padding: 5px 1px 1px; border: 0; border-radius: 0 0 21px 21px; box-shadow: none; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; flex-wrap: nowrap; }
+.floorCameraBar > div { gap: 3px; flex-wrap: nowrap; }
+.floorCameraBar button { min-height: 36px; padding: 5px 7px; font-size: 11px; border-radius: 11px; border-color: transparent; background: transparent; }
+.floorCameraBar button.on { color: var(--accent); background: var(--glass-blue); border-color: var(--line); box-shadow: none; }
+#floorSizeToggle { background: var(--glass-soft); border: 1px solid var(--line); margin-right: 2px; }
+.careerLayout .app { grid-template-columns: minmax(0, 1.25fr) minmax(340px, .85fr); }
+.careerLayout #floor3d { height: clamp(420px, 63svh, 820px); }
+.careerLayout .interactionPane { min-width: 0; align-self: start; }
+.careerLayout.floorIsExpanded .interactionPane { width: 100%; max-width: 900px; margin-inline: auto; }
+.careerLayout .floorExpanded #floor3d, .floorExpanded #floor3d { height: clamp(480px, 75svh, 1050px); }
+.side { gap: 12px; }
+.side .stats { gap: 5px 12px; font-size: 12px; }
+.log div, .reviews div { border-bottom: 1px solid var(--line); padding: 5px 0; }
+.bar { background: var(--glass-soft); }
+.bm i { background: var(--accent); }
+.bs i { background: var(--bad); }
+.bc i { background: var(--good); }
+.tHead { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+/* The customer card stays compact through all five phases. Extra explanation
+   lives in native details on both desktop and mobile. */
+.interactionPane .playerPanel { padding: 15px; border-color: var(--line); border-radius: 24px; }
+.playerHeader { align-items: center; gap: 9px; }
+.playerTitle { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.playerIdentity { gap: 6px; font-size: 12px; }
+.playerRole { color: var(--accent); background: var(--glass-blue); border: 0; padding: 4px 7px; border-radius: 8px; font-size: 11px; }
+.playerStatus { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.playerShift { color: var(--muted); font-size: 11px; }
+.playerPanel.needsBreak .playerStatus { color: var(--glass-warning); }
+.interactionPane .playerCurrent { margin-top: 10px; padding: 0; border: 0; background: transparent; border-radius: 0; }
+.interactionPane .playerCurrentTitle { font-size: 16px; font-weight: 600; line-height: 1.3; letter-spacing: -.2px; }
+.interactionPane .playerDescription { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.interactionPane .playerState { color: var(--accent); font-size: 12px; margin-top: 6px; }
+.playerPanel .playerStarted { font-size: 11px; }
+.playerPanel .playerProgress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; margin: 10px 0 8px; }
+.playerPanel .playerStep { min-width: 0; padding: 5px 2px; text-align: center; border: 0; border-radius: 9px; background: var(--glass-soft); color: var(--muted); font-size: 11px; line-height: 1.3; }
+.playerStep.isDone { color: var(--good); }
+.playerPanel .playerStep.isCurrent { background: var(--glass-blue); color: var(--accent); font-weight: 600; }
+.playerPanel .playerInteraction { margin-top: 7px; padding-top: 0; border-top: 0; }
+.playerInteractionHeader { justify-content: flex-end; }
+.playerInteractionPhase { color: var(--accent); }
+.playerDecisionTimer { color: var(--muted); font-size: 11px; }
+.playerDecisionTimer.isNearEnd { color: var(--glass-warning); }
+.playerPanel .playerSpeech { margin: 7px 0 0; font-size: 16px; letter-spacing: -.1px; line-height: 1.4; }
+.playerPanel .playerChoices { gap: 7px; margin-top: 10px; }
+.playerPanel .playerChoice { min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 15px; background: var(--glass-raised); color: var(--text); font-weight: 400; }
+.playerPanel .playerChoice.isRecommended { border-color: var(--accent); background: var(--glass-blue); }
+.playerPanel .playerChoiceHeading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.playerPanel .playerChoiceLabel { min-width: 0; font-size: 14px; font-weight: 500; line-height: 1.35; }
+.playerPanel .playerChoiceMinutes { color: var(--muted); font-size: 11px; }
+.playerPanel .playerChoiceRecommendation { padding: 2px 6px; color: var(--accent); background: var(--glass-blue); border-radius: 6px; font-size: 10px; }
+.playerPanel .playerRecommendationFull, .playerPanel .playerChoiceDetail { display: none; }
+.playerPanel .playerRecommendationShort { display: inline; }
+.playerPanel .playerChoiceFootnote { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.playerInteractionFeedback { border-color: var(--line); background: var(--glass-green); color: var(--text); border-radius: 12px; padding: 8px 10px; font-size: 12px; }
+.playerPanel.isChoosing > .playerHeader,
+.playerPanel.isChoosing > .playerStatus,
+.playerPanel.isChoosing > .playerShift,
+.playerPanel.isChoosing .playerCurrent > .playerDescription,
+.playerPanel.isChoosing .playerCurrent > .playerState,
+.playerPanel.isChoosing .playerCurrent > .playerStarted,
+.playerPanel.isChoosing .playerInteraction > .playerSpeaker,
+.playerPanel.isChoosing .playerInteraction > .playerCue,
+.playerPanel.isChoosing .playerInteraction > .playerLeadHint,
+.playerPanel.isChoosing .playerInteractionPhase { display: none; }
+.playerPanel.needsBreak.isChoosing > .playerStatus { display: block; padding: 7px 9px; border-radius: 10px; background: var(--glass-warm); color: var(--glass-warning); }
+.playerPanel.isChoosing .playerCurrent { margin-top: 0; }
+.playerPanel.isChoosing .playerCurrentTitle { font-size: 14px; }
+.playerPanel .playerMobileDetails, .playerPanel .playerTurnDetails, .playerPanel .playerResultDetails { display: block; margin: 8px 0 0; padding: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.playerPanel details > summary { min-height: 40px; padding: 8px 0; gap: 8px; color: var(--accent); list-style: none; font-size: 12px; }
+.playerPanel details > summary::-webkit-details-marker { display: none; }
+.playerPanel details > summary::marker { content: ""; }
+.playerPanel details > summary::after { content: "+"; margin-left: auto; color: var(--muted); font-size: 19px; font-weight: 400; }
+.playerPanel details[open] > summary::after { content: "−"; }
+.playerPanel .playerTurnDetails { margin-top: 8px; border-top: 1px solid var(--line); }
+.playerPanel .playerMobileDetails p { margin: 5px 0 8px; }
+.playerHelpLead, .playerLeadHint { border-color: var(--accent); color: var(--text); background: var(--glass-blue); border-radius: 0 9px 9px 0; }
+.playerChoiceExplanations strong { color: var(--text); }
+.playerChoiceExplanations span { color: var(--muted); }
+.playerInteractionResult { margin-top: 10px; padding: 10px; border-radius: 15px; border-color: var(--line); background: var(--glass-green); }
+.playerResultTitle { color: var(--text); font-size: 14px; }
+.playerResultMeta, .playerResultFeedback { color: var(--muted); font-size: 12px; }
+.playerPanel .playerEnergy { gap: 6px; margin-top: 10px; }
+.playerPanel .playerEnergyBadge { display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 9px 8px; border: 1px solid var(--line); border-radius: 13px; background: var(--glass-soft); font-size: 11px; }
+.playerPanel .playerEnergyBadge b { color: var(--text); font-size: 13px; font-weight: 600; }
+.playerPanel .playerEnergyBadge.isHigh { background: var(--glass-warm); border-color: var(--line); }
+.playerPanel .playerEnergyBadge.isHigh b { color: var(--glass-warning); }
+.playerMetrics { gap: 8px; margin-top: 5px; }
+.playerMetric strong { font-size: 22px; font-weight: 600; }
+.playerMetric span, .playerExtraStats, .playerLearning, .playerFactors, .playerHistory { color: var(--muted); font-size: 11px; }
+.playerMessage { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.playerMessage:empty { display: none; }
+.playerRecent { border-top: 1px solid var(--line); }
+.playerRecent h3 { font-size: 11px; }
+.playerHistory li { padding: 5px 0; }
+.playerCareer, .careerPath { background: var(--glass-soft); border-color: var(--line); border-radius: 14px; }
+.playerCareerTitle, .careerPathTitle, .playerCareerValue { color: var(--text); }
+.playerCareerHint, .careerPathHint, .playerCareerRole, .careerPathRoles li { color: var(--muted); }
+.playerCareerRole, .careerPathRoles li { border-color: var(--line); border-radius: 8px; }
+.playerCareerRole.isCurrent, .careerPathRoles li.isCurrent { color: var(--accent); border-color: var(--accent); background: var(--glass-blue); }
+.playerCareerRole.isDone, .careerPathRoles li.isDone { color: var(--good); border-color: var(--line); }
+.playerCareerBar { background: var(--glass-soft); border-color: var(--line); }
+.playerCareerBar span { background: var(--accent); }
+.playerPromote:disabled { color: var(--muted); background: var(--glass-soft); border-color: var(--line); opacity: .6; }
+
+/* Intake actions belong to the customer card, rather than a second large HUD. */
+.playerPanel .commandBar { padding: 0; margin: 10px 0 0; width: 100%; gap: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.playerPanel .commandBar .playerQueue { width: 100%; min-width: 0; margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.playerQueueSummary { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; width: 100%; }
+.playerPanel .commandBar .playerQueueSummary .playerQueue { width: auto; }
+.playerPanel .commandBar .playerControls { display: flex; flex-wrap: wrap; width: 100%; gap: 7px; }
+.playerPanel .playerNextRow { display: flex; align-items: stretch; gap: 8px; min-width: 0; width: 100%; }
+.playerPanel .commandBar .playerNext { flex: 1; width: auto; min-width: 0; min-height: 44px; padding: 10px; border-radius: 14px; font-size: 14px; white-space: normal; }
+.playerAutoNext { display: flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; min-height: 44px; min-width: 68px; margin: 0; padding: 7px; border: 1px solid var(--line); border-radius: 14px; background: var(--glass-soft); font-size: 12px; cursor: pointer; }
+.playerAutoNext input { width: 19px; height: 19px; flex: none; margin: 0; }
+.playerAutoNextSetting { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 7px 0; color: var(--text); font-size: 12px; }
+.playerAutoNextSetting input { width: 19px; height: 19px; flex: none; margin: 0; }
+.playerControlHint { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.playerPanel .commandBar .playerSecondaryActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; margin: 0; }
+.playerPanel .commandBar .playerSecondaryActions button { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px; border-radius: 13px; font-size: 12px; }
+.playerBrowsing { color: var(--muted); font-size: 12px; }
+.careerChoosing .playerPanel #playerCommands { display: none; }
+
+/* Mode selection, welcome and observation share the same quiet surfaces. */
+.overlay { background: var(--glass-scrim); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); }
+#intro { background: var(--glass-scrim); }
+.introBox { width: min(590px, 100%); gap: 12px; padding: 18px; border-radius: 28px; box-shadow: inset 0 1px 0 var(--glass-shine), var(--glass-shadow-raised); }
+.introTitle { font-size: 29px; font-weight: 600; letter-spacing: -.7px; }
+.introBox #introArt { border: 1px solid var(--line); border-radius: 18px; }
+.introSay { min-height: 0; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--glass-soft); font-size: 14px; }
+.card { padding: 18px; border-width: 1px; border-radius: 25px; box-shadow: inset 0 1px 0 var(--glass-shine), var(--glass-shadow-raised); }
+.card h2 { font-size: 20px; font-weight: 600; letter-spacing: -.3px; }
+.card .stats { gap: 5px 12px; }
+.introBox #modeChoices .gameModeChoice { min-height: 90px; padding: 14px; border-radius: 17px; border-color: var(--line); background: var(--glass-soft); }
+.introBox #modeChoices .gameModeChoice.isSelected { border-color: var(--accent); background: var(--glass-blue); }
+.gameModeTitle { color: var(--text); font-size: 15px; font-weight: 600; }
+.gameModeDescription, .careerResumeDescription, .careerResumeSummary { color: var(--muted); font-size: 12px; }
+.careerResume { padding: 13px; border-radius: 18px; border-color: var(--line); }
+.careerResumeTitle { font-size: 16px; font-weight: 600; }
+.introBox .careerBackupButton { min-height: 44px; border-radius: 13px; }
+.careerBackupStatus { color: var(--accent); }
+.introBox #careerWelcomeRead, .introBox #careerWelcomeCancel { min-height: 40px; color: var(--muted); border-color: var(--line); border-radius: 12px; }
+.careerWelcome { padding: 15px; gap: 12px; border-radius: 20px; }
+.welcomePortrait { border-color: var(--line); border-radius: 15px; background: var(--glass-blue); }
+.welcomeLead strong, .careerWelcome h2 { color: var(--text); }
+.welcomeLead span, .welcomeSpeech p + p { color: var(--muted); }
+.welcomeStep { color: var(--accent); }
+.welcomeSteps li { color: var(--muted); border-color: var(--line); font-size: 11px; }
+.welcomeSteps li.isCurrent { color: var(--accent); border-color: var(--accent); }
+.welcomeSpeech { border-color: var(--accent); }
+.welcomeTip { color: var(--text); border-color: var(--line); border-radius: 13px; background: var(--glass-blue); }
+.brTeam, .mSays, .mSteps span, .post, .opt { background: var(--glass-soft); border-radius: 12px; }
+.opt { border-color: var(--line); }
+.mSteps span.now { background: var(--accent); color: var(--on-accent); }
+.mSteps span.done { color: var(--good); }
+.card .mChoices button, .card .cands button { background: var(--glass-soft); color: var(--text); border-color: var(--line); }
+.card select { color: var(--text); background: var(--glass-soft); border-color: var(--line); min-height: 44px; border-radius: 12px; }
+.goalBox { border: 1px solid var(--accent); border-radius: 14px; background: var(--glass-blue); }
+
+.observationCommands { gap: 0 16px; }
+.observationHeader h2 { font-size: 17px; font-weight: 600; }
+.observationState { color: var(--accent); border-color: var(--line); background: var(--glass-blue); border-radius: 8px; font-size: 10px; padding: 4px 6px; }
+.observationIntro, .observationTotals, .observationDraftState, .observationPhaseList dt { color: var(--muted); font-size: 12px; }
+.observationMetric, .observationConfiguration, .observationLive, .observationComparison, .observationFieldset, .observationNotice { border-color: var(--line); border-radius: 14px; background: var(--glass-soft); }
+.observationMetric { padding: 10px; }
+.observationMetric strong { color: var(--text); font-size: 24px; font-weight: 600; }
+.observationMetricLabel { color: var(--muted); font-size: 11px; }
+.observationMetricNote, .observationStamp, .observationHint, .observationFootnote, .observationCapacity { color: var(--muted); font-size: 11px; }
+.observationDetails { font-size: 12px; }
+.observationDetails > summary, .observationDetails[open] > summary { min-height: 44px; padding: 10px 3px; color: var(--accent); font-size: 12px; }
+.observationComparison h3, .observationFieldset legend, .observationFieldLabel, .observationPhaseList dd, .observationCompareResults dd { color: var(--text); font-size: 12px; }
+.observationCompareResults dd.isBetter { color: var(--good); }
+.observationCompareResults dd.isWorse { color: var(--bad); }
+.observationFieldLabel output { color: var(--accent); }
+.observationField input:not([type="range"]), .observationField select { color: var(--text); background: var(--glass-raised); border-color: var(--line); border-radius: 11px; min-height: 44px; padding: 7px 9px; font-size: 12px; }
+.observationField input[type="range"] { min-height: 34px; accent-color: var(--accent); }
+.observationLab button, .observationCommands button { min-height: 44px; font-size: 12px; padding: 8px 10px; border-radius: 12px; }
+.observationTable { font-size: 11px; }
+.observationTable caption { color: var(--muted); font-size: 11px; }
+.observationTable thead th { color: var(--muted); font-size: 10px; border-color: var(--line); }
+.observationTable tbody th, .observationTable td { padding: 6px 2px; border-color: var(--line); }
+.observationNotice { color: var(--text); padding: 9px; font-size: 12px; }
+.observationDraftState.isChanged, .observationCapacity.isWarning { color: var(--glass-warning); }
+
+@media (hover: hover) {
+  button:hover:not(:disabled) { filter: brightness(.98); }
+  .playerPanel .playerChoice:hover:not(:disabled) { border-color: var(--accent); background: var(--glass-blue); }
+  .introBox #modeChoices .gameModeChoice:hover { border-color: var(--accent); background: var(--glass-blue); }
+}
+
+@media (min-width: 1101px) {
+  .careerLayout:not(.floorIsExpanded) .stage { position: sticky; top: 16px; align-self: start; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .careerLayout .app { grid-template-columns: minmax(0, 1fr) minmax(310px, 1fr); }
+  .careerLayout #floor3d { height: clamp(360px, 57svh, 650px); }
+}
+@media (max-width: 760px) {
+  .app { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); gap: 9px; }
+  .careerLayout .app, .careerLayout.floorIsExpanded .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "controls" "stage" "interaction" "side"; }
+  .careerLayout .controlsStack { position: static; gap: 7px; }
+  .careerLayout .hud, .hud { padding: 7px 9px; border-radius: 20px; }
+  .careerLayout .hudRow { flex-wrap: nowrap; gap: 6px; }
+  .careerLayout .clock { font-size: 22px; line-height: 1.05; letter-spacing: -.7px; }
+  .careerLayout #date { font-size: 10px; line-height: 1.35; }
+  .careerLayout .hud #speed { gap: 1px; padding: 2px; border-radius: 14px; }
+  .careerLayout .hud #speed button { min-height: 40px; min-width: 32px; padding: 4px; font-size: 12px; border-radius: 11px; }
+  .careerLayout .hud #changeMode { min-height: 40px; padding: 6px 9px; font-size: 12px; }
+  .hud .modeLabelFull { display: none; }
+  .hud .modeLabelShort { display: inline; }
+  .careerLayout .hud .modeBar { width: auto; gap: 0; }
+  .floorViewport { padding: 3px; border-radius: 24px; }
+  .scroller, #floor3d { border-radius: 20px; }
+  .floorCameraBar, .floorCameraBar > div { gap: 2px; }
+  .floorCameraBar { padding: 4px 0 0; }
+  .floorCameraBar button { padding: 5px; font-size: 10.5px; min-height: 36px; border-radius: 10px; }
+  .careerLayout #floor3d { height: clamp(240px, 33svh, 280px); }
+  .careerLayout.careerChoosing #floor3d { height: clamp(180px, 24svh, 220px); }
+  .floorExpanded #floor3d, .careerLayout .floorExpanded #floor3d, .careerLayout.careerChoosing .floorExpanded #floor3d { height: clamp(360px, 65svh, 700px); }
+  .careerLayout .interactionPane, .careerLayout.floorIsExpanded .interactionPane { width: 100%; margin: 0; }
+  .interactionPane .playerPanel { border-radius: 23px; padding: 12px; }
+  .playerPanel .commandBar { padding: 0; margin-top: 9px; gap: 6px; }
+  .careerLayout .playerPanel .commandBar .playerControls { display: flex; flex-wrap: wrap; gap: 7px; }
+  .playerPanel .commandBar .playerQueue { font-size: 11px; }
+  .playerPanel .commandBar .playerNext { min-height: 44px; padding: 10px 8px; font-size: 14px; }
+  .playerPanel .commandBar .playerSecondaryActions { flex-wrap: nowrap; gap: 6px; }
+  .playerPanel .commandBar .playerSecondaryActions button { min-height: 44px; padding: 7px; font-size: 12px; }
+  .playerPanel .playerAutoNext { min-width: 64px; min-height: 44px; }
+  .playerPanel.isChoosing .playerCurrentTitle { font-size: 14px; line-height: 1.3; }
+  .playerPanel.isChoosing .playerProgress { margin-top: 8px; gap: 3px; }
+  .playerPanel.isChoosing .playerStep { padding: 5px 2px; font-size: 11px; line-height: 1.3; }
+  .playerPanel.isChoosing .playerInteraction { margin-top: 5px; padding-top: 0; }
+  .playerPanel.isChoosing .playerSpeech { font-size: 15px; line-height: 1.35; margin-top: 5px; }
+  .playerPanel.isChoosing .playerChoices { gap: 6px; margin-top: 8px; }
+  .playerPanel.isChoosing .playerChoice { min-height: 44px; padding: 9px 10px; }
+  .playerPanel.isChoosing .playerChoiceLabel { font-size: 14px; line-height: 1.35; }
+  .playerPanel.isChoosing .playerChoiceMinutes { font-size: 10px; }
+  .playerPanel.isChoosing .playerChoiceRecommendation { padding: 2px 5px; font-size: 10px; }
+  .playerPanel.isChoosing .playerMobileDetails { margin-top: 4px; }
+  .playerPanel .playerEnergy { gap: 5px; margin-top: 9px; }
+  .playerPanel .playerEnergyBadge { padding: 8px 6px; gap: 3px; font-size: 11px; }
+  .playerPanel .playerEnergyBadge b { font-size: 13px; }
+  .playerPanel .playerTurnDetails > summary { min-height: 40px; }
+  .introBox { padding: 13px; border-radius: 25px; }
+  .introBox #modeChoices .gameModeChoice { min-height: 80px; padding: 12px; }
+  .observationCommands { padding: 8px 12px; }
+  .observationStaffGrid .observationFieldLabel { font-size: 11px; }
+}
+@media (max-width: 380px) {
+  .careerLayout .hud #speed button { min-width: 29px; }
+  .careerLayout .clock { font-size: 21px; }
+  .playerPanel .playerEnergyBadge { flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 8px; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .box, .card, .introBox, .careerWelcome, .careerResume, .floorViewport { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .box, .card, .introBox, .careerWelcome, .careerResume, .floorViewport { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #intro, .overlay { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, .box, .card, .scroller { animation: none; transition: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --line: currentColor; }
+  button, .playerChoice, .box, .card { box-shadow: none; }
+}

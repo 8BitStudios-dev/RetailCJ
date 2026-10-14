@@ -125,7 +125,7 @@
     failure = null;
     disconnect();
     message('Caricamento del floor 3D…');
-    const work = import('./renderer-3d.js?v=2.2.1').then(({ FloorRenderer }) => {
+    const work = import('./renderer-3d.js?v=2.3.0').then(({ FloorRenderer }) => {
       if (attempt !== generation) return false;
       phase = 'render';
       const candidate = new FloorRenderer({ canvas, onSelect: api.select });
