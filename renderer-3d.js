@@ -1,12 +1,14 @@
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { buildTableFrame, buildTodayStool, buildBarStools } from './store-furniture.js?v=2.2.0';
+import { buildProductDisplay } from './store-displays.js?v=2.2.0';
 
 // The view consumes the existing floor simulation. It owns no game state and
 // never changes an entity, a queue slot, or a saved career.
 const SCALE = 0.01;
 const FACE = { down: 0, right: Math.PI / 2, up: Math.PI, left: -Math.PI / 2 };
 const TALK_STATES = new Set(['talking', 'probe', 'listen', 'advise', 'helping', 'handover', 'atBar', 'repair', 'presenting']);
-const COLORS = { wood: '#be9367', edge: '#a7794f', floor: '#e8e6e0', ink: '#233246', blue: '#1674cf', green: '#689151' };
+const COLORS = { wood: '#c99b61', edge: '#ae824f', floor: '#a6acad', ink: '#233246', blue: '#1674cf', green: '#689151' };
 
 function roundedRect(context, x, y, width, height, radius) {
   context.beginPath();
@@ -64,8 +66,8 @@ export class FloorRenderer {
     this.pointer = new THREE.Vector2();
     this.pointerStart = null;
     this.projectVector = new THREE.Vector3();
-    this.scene.add(new THREE.HemisphereLight('#fffaf0', '#8a9baf', 2.15));
-    const key = new THREE.DirectionalLight('#fff0d5', 2.8);
+    this.scene.add(new THREE.HemisphereLight('#f6f8ff', '#8995a0', 2.15));
+    const key = new THREE.DirectionalLight('#fff7ed', 2.8);
     key.position.set(-8, 16, 9);
     this.scene.add(key);
     const rim = new THREE.DirectionalLight('#dceeff', 1.15);
@@ -133,6 +135,53 @@ export class FloorRenderer {
     return this.mesh(parent, this.baseGeometry.box, this.material(hex, options), x, y, z, sx, sy, sz);
   }
 
+  surfaceMaterial(kind) {
+    const key = 'store-surface:' + kind;
+    if (this.materials.has(key)) return this.materials.get(key);
+    const canvas = document.createElement('canvas');
+    const wood = kind === 'oak';
+    canvas.width = 256;
+    canvas.height = wood ? 512 : 256;
+    const context = canvas.getContext('2d');
+    // Local randomness makes texture creation independent of the simulation seed.
+    let seed = wood ? 0x6f616b : 0x73746f6e;
+    const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+    context.fillStyle = wood ? '#c79c65' : '#989fa1';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (wood) {
+      for (let i = 0; i < 230; i++) {
+        const x = random() * 256;
+        context.strokeStyle = i % 3 ? 'rgba(102,65,31,0.09)' : 'rgba(255,231,188,0.16)';
+        context.lineWidth = 0.35 + random() * 0.85;
+        context.beginPath(); context.moveTo(x, 0);
+        context.bezierCurveTo(x + random() * 7 - 3.5, 170, x + random() * 7 - 3.5, 340, x, 512);
+        context.stroke();
+      }
+      for (const x of [63, 127, 191]) {
+        context.fillStyle = 'rgba(112,79,42,0.07)'; context.fillRect(x, 0, 1, 512);
+      }
+    } else {
+      for (let i = 0; i < 12500; i++) {
+        const shade = random() > 0.5 ? 220 : 42;
+        context.fillStyle = `rgba(${shade},${shade},${shade},${0.035 + random() * 0.08})`;
+        const size = random() > 0.9 ? 1.8 : 0.8;
+        context.fillRect(random() * 256, random() * 256, size, size);
+      }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(wood ? 1 : 12, wood ? 1 : 16);
+    texture.anisotropy = 2;
+    this.textures.add(texture);
+    const material = new THREE.MeshStandardMaterial({color: '#ffffff', map: texture,
+      roughness: wood ? 0.58 : 0.94, metalness: 0});
+    this.materials.set(key, material);
+    return material;
+  }
+
+  woodMaterial() { return this.surfaceMaterial('oak'); }
+
   point(x, y, height = 0) {
     return new THREE.Vector3((x - (this.layout?.width || 1440) / 2) * SCALE, height, (y - (this.layout?.height || 1900) / 2) * SCALE);
   }
@@ -198,14 +247,14 @@ export class FloorRenderer {
     this.scene.add(this.world);
     const width = layout.width * SCALE, height = layout.height * SCALE;
     this.box(this.world, '#b7c1c5', 0, -0.23, 0, width + 0.42, 0.28, height + 0.42);
-    const floor = this.box(this.world, COLORS.floor, 0, -0.055, 0, width, 0.12, height);
+    const floor = this.mesh(this.world, this.baseGeometry.box, this.surfaceMaterial('stone'), 0, -0.055, 0, width, 0.12, height);
     floor.userData.selection = null;
     const tileVertices = [];
     for (let x = -width / 2; x <= width / 2; x += 0.72) tileVertices.push(x, 0.011, -height / 2, x, 0.011, height / 2);
     for (let z = -height / 2; z <= height / 2; z += 0.72) tileVertices.push(-width / 2, 0.011, z, width / 2, 0.011, z);
     const tileGeometry = this.keep(new THREE.BufferGeometry());
     tileGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tileVertices, 3));
-    this.world.add(new THREE.LineSegments(tileGeometry, new THREE.LineBasicMaterial({ color: '#d6d5d0', transparent: true, opacity: 0.65 })));
+    this.world.add(new THREE.LineSegments(tileGeometry, new THREE.LineBasicMaterial({ color: '#697478', transparent: true, opacity: 0.35 })));
     this.box(this.world, '#fafaf7', -width / 2 + 0.14, 0.12, 0, 0.16, 0.24, height);
     this.box(this.world, '#fafaf7', width / 2 - 0.14, 0.12, 0, 0.16, 0.24, height);
     this.box(this.world, '#fafaf7', 0, 0.12, height / 2 - 0.08, width, 0.24, 0.13);
@@ -271,46 +320,42 @@ export class FloorRenderer {
     const width = table.w * SCALE, length = table.h * SCALE;
     const shadow = this.mesh(group, this.baseGeometry.circle, this.material('#283447', { basic: true, opacity: 0.10 }), 0.07, 0.018, 0.08, width * 0.7, length * 0.6, 1);
     shadow.rotation.x = -Math.PI / 2;
-    this.box(group, COLORS.edge, 0, 0.665, 0, width, 0.09, length);
-    this.box(group, COLORS.wood, 0, 0.73, 0, width + 0.012, 0.09, length + 0.018, { roughness: 0.52 });
-    for (const x of [-width * 0.32, width * 0.32]) for (const z of [-length * 0.36, length * 0.36]) {
-      this.box(group, '#ae845b', x, 0.33, z, 0.075, 0.65, 0.075);
-    }
+    const {top} = buildTableFrame(this, group, table, {width, length});
     const label = this.label(table.name, { width: 0.40, height: 0.15, background: table.kind === 'support' ? '#276782' : '#f5f0e6', foreground: table.kind === 'support' ? '#ffffff' : '#725940' });
-    label.position.set(0, 0.89, -length * 0.45);
+    label.position.set(0, top + 0.12, -length * 0.45);
     group.add(label);
-    const product = table.product || 'support';
-    const palette = ['#578cb0', '#897eae', '#64a59a'];
-    for (let i = 0; i < 3; i++) {
-      const z = -length * 0.26 + i * length * 0.26;
-      if (product === 'mac' || product === 'support') {
-        this.box(group, '#d5dce0', 0, 0.792, z, 0.42, 0.023, 0.30, { metalness: 0.32 });
-        const screen = this.box(group, '#374556', 0, 0.96, z - 0.12, 0.39, 0.29, 0.027);
-        screen.rotation.x = -0.12;
-        this.box(group, palette[i], 0, 0.964, z - 0.101, 0.345, 0.24, 0.007, { roughness: 0.35 });
-      } else if (product === 'watch') {
-        this.box(group, '#f4eee4', 0, 0.80, z, 0.36, 0.05, 0.19);
-        for (const x of [-0.10, 0.10]) {
-          this.box(group, i % 2 ? '#dfc3a4' : '#414e63', x, 0.835, z, 0.067, 0.01, 0.14);
-          this.box(group, '#283445', x, 0.85, z, 0.073, 0.025, 0.07, { roughness: 0.25, metalness: 0.45 });
-          this.box(group, '#5ca5cb', x, 0.865, z, 0.054, 0.004, 0.052, { basic: true });
-        }
-      } else if (product === 'help') {
-        if (i === 1) this.box(group, '#efeeea', 0, 0.79, z, 0.36, 0.024, 0.25);
-      } else if (product !== 'express') {
-        const ipad = product === 'ipad';
-        for (const x of ipad ? [0] : [-0.13, 0.13]) {
-          this.box(group, '#f3f3f0', x, 0.80, z, ipad ? 0.27 : 0.15, 0.035, ipad ? 0.39 : 0.25);
-          this.box(group, '#25313e', x, 0.827, z, ipad ? 0.245 : 0.12, 0.025, ipad ? 0.35 : 0.215, { roughness: 0.22 });
-          this.box(group, palette[(i + (x > 0 ? 1 : 0)) % 3], x, 0.843, z, ipad ? 0.215 : 0.10, 0.005, ipad ? 0.30 : 0.178, { basic: true });
-        }
-      }
-    }
-    if (product === 'express') {
-      this.box(group, '#faf7ed', 0, 0.797, length * 0.15, 0.39, 0.055, 0.32);
-      this.box(group, '#364557', 0, 0.825, length * 0.15, 0.18, 0.018, 0.25);
-      this.box(group, '#4a94b7', 0, 0.838, length * 0.15, 0.15, 0.01, 0.21);
-      this.box(group, '#f7f1e3', 0, 0.805, -length * 0.1, 0.23, 0.075, 0.18);
+    buildProductDisplay(this, group, table, {width, length, top});
+    if (table.kind === 'support') buildBarStools(this, group, {width, length, top});
+    this.batchTable(group);
+  }
+
+  batchTable(group) {
+    // Keep the selectable table parent; instances continue to raycast to it.
+    group.updateMatrixWorld(true);
+    const inverse = group.matrixWorld.clone().invert();
+    const buckets = new Map();
+    group.traverse(object => {
+      if (!object.isMesh || object.isInstancedMesh || Array.isArray(object.material)) return;
+      const key = object.geometry.uuid + ':' + object.material.uuid;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(object);
+    });
+    this.tableMeshesBefore = (this.tableMeshesBefore || 0) + [...buckets.values()].reduce((total, meshes) => total + meshes.length, 0);
+    this.tableDrawCalls = (this.tableDrawCalls || 0) + buckets.size;
+    const matrix = new THREE.Matrix4();
+    for (const meshes of buckets.values()) {
+      if (meshes.length < 2) continue;
+      const batch = new THREE.InstancedMesh(meshes[0].geometry, meshes[0].material, meshes.length);
+      batch.userData.tableBatch = true;
+      meshes.forEach((mesh, index) => {
+        matrix.multiplyMatrices(inverse, mesh.matrixWorld);
+        batch.setMatrixAt(index, matrix);
+        mesh.removeFromParent();
+      });
+      batch.instanceMatrix.needsUpdate = true;
+      batch.computeBoundingBox(); batch.computeBoundingSphere();
+      group.add(batch);
+      this.tableBatches = (this.tableBatches || 0) + 1;
     }
   }
 
@@ -352,11 +397,7 @@ export class FloorRenderer {
   }
 
   buildStool(stool) {
-    const group = new THREE.Group();
-    group.position.copy(this.point(stool.x, stool.y));
-    this.world.add(group);
-    this.mesh(group, this.baseGeometry.cylinder, this.material('#c79b6c'), 0, 0.39, 0, 0.235, 0.075, 0.235);
-    for (const x of [-0.13, 0.13]) for (const z of [-0.13, 0.13]) this.box(group, '#ad8159', x, 0.19, z, 0.032, 0.37, 0.032);
+    buildTodayStool(this, stool);
   }
 
   buildScreen(screen) {
@@ -750,7 +791,8 @@ export class FloorRenderer {
 
   getStats() {
     return { people: this.actors.size, drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, pixelRatio: this.renderer.getPixelRatio(),
-      staticMeshesBefore: this.staticMeshesBefore || 0, staticDrawCalls: this.staticMeshesAfter || 0, staticBatches: this.staticBatches || 0 };
+      staticMeshesBefore: this.staticMeshesBefore || 0, staticDrawCalls: this.staticMeshesAfter || 0, staticBatches: this.staticBatches || 0,
+      tableMeshesBefore: this.tableMeshesBefore || 0, tableDrawCalls: this.tableDrawCalls || 0, tableBatches: this.tableBatches || 0 };
   }
 
   dispose() {
@@ -762,6 +804,7 @@ export class FloorRenderer {
     this.canvas.removeEventListener('pointercancel', this.handlePointerCancel);
     this.controls.dispose();
     this.scene.traverse(object => {
+      if (object.isInstancedMesh) object.dispose();
       if (object.isSprite) object.material.dispose();
       if (object.isLineSegments) object.material.dispose();
     });

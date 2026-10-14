@@ -188,6 +188,9 @@ test('nonselectable static fixtures use real InstancedMesh batches while tables 
   assert.ok(stats.staticMeshesBefore > 500, 'The fixture includes the full store accessory display');
   assert.ok(stats.staticDrawCalls < stats.staticMeshesBefore / 8, 'Repeated static pieces require far fewer draw calls');
   assert.ok(stats.staticBatches > 5);
+  assert.ok(stats.tableDrawCalls < stats.tableMeshesBefore, 'Detailed selectable displays must also benefit from batching');
+  assert.ok(stats.tableDrawCalls <= (layout.tables.length + layout.support.length) * 36, 'Display detail must keep table draw calls bounded');
+  assert.ok(stats.tableBatches > 0);
   let instances = 0, labels = 0;
   view.world.traverse(object => {
     if (object.isInstancedMesh) {
@@ -205,7 +208,7 @@ test('nonselectable static fixtures use real InstancedMesh batches while tables 
   for (const {table, group} of view.tables.values()) {
     assert.ok(view.pickables.includes(group));
     assert.deepEqual(group.userData.selection, {type: 'table', name: table.name});
-    assert.ok(group.children.some(object => object.isMesh && !object.isInstancedMesh));
+    assert.ok(group.children.some(object => object.isMesh), 'A selectable table keeps real geometry, including instanced parts');
   }
 });
 
@@ -224,10 +227,13 @@ test('real Three.js raycasting selects string-ID staff, customers and tables aft
     view.selectAt(screen.x, screen.y);
     assert.deepEqual(selected, {type: 'person', id: person.id, isStaff: person.isStaff});
   }
-  const table = layout.tables.find(table => table.name === 'B1');
-  const tableScreen = view.project({x: table.x + table.w / 2, y: table.y + table.h / 2});
-  view.selectAt(tableScreen.x, tableScreen.y);
-  assert.deepEqual(selected, {type: 'table', name: 'B1'});
+  for (const table of [...layout.tables, ...layout.support]) {
+    // Aim at the solid tabletop, not the intentional central cable slit.
+    const tableScreen = view.project({x: table.x + table.w * 0.22, y: table.y + table.h * 0.18});
+    assert.equal(tableScreen.visible, true);
+    view.selectAt(tableScreen.x, tableScreen.y);
+    assert.deepEqual(selected, {type: 'table', name: table.name});
+  }
   const blank = view.project({x: 50, y: 50});
   view.selectAt(blank.x, blank.y);
   assert.equal(selected, null);
@@ -339,4 +345,85 @@ test('the first 3D world build keeps the personal view and anchors it to the fir
   assert.ok(Math.abs(view.controls.target.x - anchor.x) < 1e-9);
   assert.ok(Math.abs(view.controls.target.z - anchor.z) < 1e-9);
   assert.equal(JSON.stringify(frame), before);
+});
+
+test('detailed store displays remain finite and distinct within furniture bounds and release all their shared resources', async () => {
+  const {THREE, view, layout} = await fixture({world: true});
+  const layoutBefore = JSON.stringify(layout);
+  const geometries = new Set(), materials = new Set(), textures = new Set(), instances = new Set();
+  const cachedMaterials = new Set(view.materials.values());
+  view.world.traverse(object => {
+    if (object.geometry && !object.isSprite) {
+      geometries.add(object.geometry);
+      assert.ok(view.geometries.has(object.geometry), 'World geometry has an explicit renderer owner');
+      const positions = object.geometry.getAttribute('position');
+      if (positions) for (const coordinate of positions.array) assert.ok(Number.isFinite(coordinate));
+    }
+    if (object.isInstancedMesh) instances.add(object);
+    for (const material of object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : []) {
+      materials.add(material);
+      if (object.isMesh) assert.ok(cachedMaterials.has(material), 'Furniture and display materials use the shared renderer cache');
+      for (const value of Object.values(material)) if (value && value.isTexture) {
+        textures.add(value);
+        assert.ok(view.textures.has(value), 'Procedural surfaces and display textures have an explicit renderer owner');
+      }
+    }
+  });
+  assert.ok(textures.size > 0);
+  const signatures = new Map();
+  view.world.updateMatrixWorld(true);
+  for (const {table, group} of view.tables.values()) {
+    const inverse = group.matrixWorld.clone().invert();
+    const bounds = new THREE.Box3();
+    const displayParts = [];
+    group.traverse(object => {
+      if (!object.isMesh || !object.visible) return;
+      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      if (objectMaterials.every(material => material.transparent && material.opacity < 0.25)) return; // floor shadows and invisible hit surfaces
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      const objectMatrix = inverse.clone().multiply(object.matrixWorld);
+      const count = object.isInstancedMesh ? object.count : 1;
+      for (let index = 0; index < count; index++) {
+        const localMatrix = objectMatrix.clone();
+        if (object.isInstancedMesh) {
+          const instance = new THREE.Matrix4(); object.getMatrixAt(index, instance);
+          assert.ok(instance.elements.every(Number.isFinite));
+          localMatrix.multiply(instance);
+        }
+        const part = object.geometry.boundingBox.clone().applyMatrix4(localMatrix);
+        assert.ok([...part.min.toArray(), ...part.max.toArray()].every(Number.isFinite));
+        bounds.union(part);
+        if (part.max.y > 0.84) {
+          const size = part.getSize(new THREE.Vector3()), center = part.getCenter(new THREE.Vector3());
+          displayParts.push([...size.toArray(), ...center.toArray()].map(value => value.toFixed(3)).join(','));
+        }
+      }
+    });
+    assert.equal(bounds.isEmpty(), false, `${table.name} has physical furniture`);
+    const size = bounds.getSize(new THREE.Vector3());
+    const support = table.kind === 'support';
+    assert.ok(size.x <= table.w * 0.01 + (support ? 1.4 : 0.2), `${table.name} must not extend unreasonably into adjacent aisles`);
+    assert.ok(size.z <= table.h * 0.01 + 0.4, `${table.name} keeps its layout footprint along the aisle`);
+    assert.ok(bounds.min.y >= -0.03 && bounds.max.y < 1.8, `${table.name} has plausible finite furniture height`);
+    if (['iphone', 'ipad', 'mac', 'watch'].includes(table.product)) {
+      assert.ok(displayParts.length > 0, `${table.product} has a display above the table`);
+      if (!signatures.has(table.product)) signatures.set(table.product, displayParts.sort().join('|'));
+    }
+  }
+  assert.equal(signatures.size, 4, 'All four product families are represented');
+  assert.equal(new Set(signatures.values()).size, 4, 'Product families have different physical displays');
+  assert.equal(JSON.stringify(layout), layoutBefore, 'Furniture cannot move simulation tables, stools or queues');
+
+  const resources = new Set([...geometries, ...materials, ...textures, ...instances]);
+  const disposed = new Map([...resources].map(resource => [resource, 0]));
+  for (const resource of resources) resource.addEventListener('dispose', () => disposed.set(resource, disposed.get(resource) + 1));
+  view.resizeObserver = {disconnect() {}};
+  view.controls.dispose = () => {};
+  view.renderer.dispose = () => {};
+  view.dispose();
+  for (const [resource, count] of disposed) assert.ok(count > 0, `${resource.type || 'texture'} must be released when rebuilding a renderer`);
+  assert.equal(view.pickables.length, 0);
+  const firstDisposal = [...disposed.values()];
+  view.dispose();
+  assert.deepEqual([...disposed.values()], firstDisposal, 'Disposing twice must not release resources again');
 });
