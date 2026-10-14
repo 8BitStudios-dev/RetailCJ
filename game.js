@@ -1,0 +1,2861 @@
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+// Simulazione del floor; il renderer 3D legge lo stato senza modificarlo.
+const WORLD_W = 1440, WORLD_H = 1900;
+const REAL_SEC_PER_MIN = 0.75;
+const WALK = 300;               // unità per minuto di gioco
+const OPEN = 10 * 60, LAST_ENTRY = 19 * 60 + 45, CLOSE = 20 * 60;
+
+let floorRenderer = null;
+let floorReady = false;
+
+// Nei livelli il caso ha un seme: la stessa giornata si ripete uguale, e si vede solo l'effetto della strategia
+const nativeRandom = Math.random;
+function mulberry(seed) { let st = seed >>> 0 || 1; return () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function seedRandom(seed) { Math.random = seed === null ? nativeRandom : mulberry(seed); }
+const rand = (a, b) => a + Math.random() * (b - a);
+const randi = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+
+// ─────────────────────────────────────────────────────────────
+// Planimetria (Piazza Liberty), dalle misure del disegno
+// ─────────────────────────────────────────────────────────────
+const DOOR = { x: 1250, y: 10 };
+// Due Point: uno all'ingresso, uno sopra il primo tavolo del Genius Bar.
+// Chi entra si mette in fila, dice al Point cosa cerca e viene mandato al posto giusto.
+const POINT_IN = { x: 1272, y: 235, face: 'up', talk: { x: 1272, y: 190 },
+  line: [[1250, 145], [1228, 105], [1272, 105], [1228, 68], [1272, 68]].map(([x, y]) => ({ x, y })) };
+// nei giorni pieni c'è un secondo Point all'ingresso, sulla stessa fila
+const POINT_IN2 = { x: 1222, y: 235, face: 'up', talk: { x: 1222, y: 190 }, line: POINT_IN.line };
+const POINT_GB = { x: 482, y: 1092, face: 'left', talk: { x: 428, y: 1082 },
+  line: [385, 345, 305, 265, 225, 185, 145].map(x => ({ x, y: 1078 })) };
+// Cassa Express sotto B1: cliente a sinistra del collega e fila lungo il lato sinistro del tavolo.
+const EXPRESS = { x: 1145, y: 740, face: 'left', talk: { x: 1070, y: 740 },
+  line: Array.from({ length: 12 }, (_, i) => ({ x: 1050, y: 675 - i * 50 })) };
+// Chi aspetta il runner libera la cassa e la fila, nel corridoio a destra di B1.
+const EXPRESS_WAIT = Array.from({ length: 16 }, (_, i) => ({
+  x: i < 8 ? 1240 : 1260, y: i < 8 ? 720 + i * 50 : 1120 + (i - 8) * 50, taken: null,
+}));
+const EXPRESS_RUNNER_RATE = 0.25;
+// Pareti accessori: x del cliente davanti alla parete
+const WALL_SPOT = { L: 132, R: 1283 };
+const WALLS = [
+  { x: 63, y: 96, w: 42, h: 1652 },
+  { x: 1310, y: 96, w: 42, h: 1652 },
+];
+const COLS = [209, 431, 664, 883, 1101];
+const ROWS = [96, 463, 797];
+// Colonne da sinistra a destra; i nomi contano da destra: A1 è in alto a destra, A5 in alto a sinistra
+// A: iPhone, A1 iPad · B: iPhone in B5 e B4, Watch in B3, iPad in B2, Express in B1 · C: Mac, Watch in C3, C1 e C5 per aiutare i clienti
+const ROW_PRODUCTS = [
+  ['iphone', 'iphone', 'iphone', 'iphone', 'ipad'],
+  ['iphone', 'iphone', 'watch', 'ipad', 'express'],
+  ['help', 'mac', 'watch', 'mac', 'help'],
+];
+const PRODUCT_NAME = { iphone: 'iPhone', ipad: 'iPad', watch: 'Apple Watch', mac: 'Mac', express: 'cassa Express', help: 'aiuto ai clienti' };
+
+const TABLES = [];
+ROWS.forEach((y, r) => COLS.forEach((x, c) =>
+  TABLES.push({ x, y, w: 88, h: 227, name: 'ABC'[r] + (5 - c), product: ROW_PRODUCTS[r][c], kind: ROW_PRODUCTS[r][c] === 'express' ? 'express' : 'product' })));
+const SUPPORT = [438, 671, 889].map((x, i) => ({ x, y: 1132, w: 88, h: 228, name: 'D' + (4 - i), kind: 'support' }));
+const tableByName = n => TABLES.concat(SUPPORT).find(t => t.name === n);
+const TREES = [];
+[1178, 1351, 1532, 1712].forEach(y => { TREES.push({ x: 275, y, r: 67 }); TREES.push({ x: 1144, y, r: 67 }); });
+const STOOLS = [
+  [526, 1470], [758, 1480], [618, 1533], [851, 1542], [466, 1569], [699, 1578],
+  [561, 1614], [794, 1624], [673, 1677], [473, 1686], [906, 1686],
+].map(([x, y]) => ({ x: x + 26, y: y + 31, taken: null }));
+const SCREEN = { x: 405, y: 1810, w: 588, h: 36 };
+const STAGE = { x: 700, y: 1795 };
+// Backstage: il magazzino dietro la porta in basso a destra. Il team Operations aspetta lì dentro,
+// esce solo per portare il prodotto allo Specialist, che lo consegna al cliente
+const BACK_DOOR = { x: 1250, y: 1872 };
+const PICK_TIME = { iphone: [0.3, 0.8], ipad: [0.9, 1.6], watch: [0.9, 1.6], mac: [1.1, 1.9], acc: [0.5, 1.1] };
+const OPS_HOMES = [BACK_DOOR];
+// I Lead non vendono: girano sul floor, osservano i clienti e risolvono i problemi (per ora osservano soltanto)
+const LEAD_HOMES = [{ x: 560, y: 420 }, { x: 980, y: 760 }, { x: 330, y: 1080 }];
+
+// Posti attorno ai tavoli prodotto: cliente accanto al tavolo, dipendente sotto di lui
+const SLOTS = [];
+TABLES.filter(t => t.kind === 'product').forEach(t => {
+  for (const side of [-1, 1]) {
+    for (const oy of [55, 150]) {
+      const x = side < 0 ? t.x - 24 : t.x + t.w + 24;
+      SLOTS.push({ table: t, x, y: t.y + oy, sx: x, sy: t.y + oy + 34, taken: null });
+    }
+  }
+});
+// Genius Bar: cliente a sinistra del tavolo, Genius a destra
+const BAR = [];
+SUPPORT.forEach(t => {
+  for (const oy of [30, 85, 140, 195]) {               // quattro posti per tavolo, dodici in tutto
+    BAR.push({ table: t, x: t.x - 20, y: t.y + oy, gx: t.x + t.w + 20, gy: t.y + oy, taken: null });
+  }
+});
+// Attesa Genius: corridoi tra alberi e Genius Bar
+const QUEUE = [];
+for (let y = 1150; y <= 1400; y += 50) { QUEUE.push({ x: 370, y, taken: null }); QUEUE.push({ x: 1050, y, taken: null }); }
+
+// ─────────────────────────────────────────────────────────────
+// Griglia e A* (celle da 20 unità, ostacoli gonfiati)
+// ─────────────────────────────────────────────────────────────
+const CELL = 20;
+const GW = Math.ceil(WORLD_W / CELL), GH = Math.ceil(WORLD_H / CELL);
+const blocked = new Uint8Array(GW * GH);
+function blockRect(x, y, w, h, pad) {
+  const x0 = Math.max(0, Math.floor((x - pad) / CELL)), x1 = Math.min(GW - 1, Math.floor((x + w + pad) / CELL));
+  const y0 = Math.max(0, Math.floor((y - pad) / CELL)), y1 = Math.min(GH - 1, Math.floor((y + h + pad) / CELL));
+  for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) blocked[gy * GW + gx] = 1;
+}
+function buildGrid() {
+  // fuori dallo store
+  blockRect(0, 0, 105, WORLD_H, 0);
+  blockRect(1310, 0, WORLD_W - 1310, WORLD_H, 0);
+  blockRect(0, 0, 1180, 60, 0);          // parete in alto, porta a destra
+  blockRect(0, 1880, WORLD_W, 20, 0);
+  WALLS.forEach(w => blockRect(w.x, w.y, w.w, w.h, 8));
+  TABLES.concat(SUPPORT).forEach(t => blockRect(t.x, t.y, t.w, t.h, 8));
+  TREES.forEach(t => blockRect(t.x - t.r, t.y - t.r, t.r * 2, t.r * 2, 0));
+  blockRect(SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h, 4);
+}
+buildGrid();
+const cellOf = p => ({ gx: Math.min(GW - 1, Math.max(0, Math.floor(p.x / CELL))), gy: Math.min(GH - 1, Math.max(0, Math.floor(p.y / CELL))) });
+const isFree = (gx, gy) => gx >= 0 && gy >= 0 && gx < GW && gy < GH && !blocked[gy * GW + gx];
+function nearestFree(c) {
+  if (isFree(c.gx, c.gy)) return c;
+  for (let r = 1; r < 10; r++)
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)
+      if (isFree(c.gx + dx, c.gy + dy)) return { gx: c.gx + dx, gy: c.gy + dy };
+  return c;
+}
+function lineFree(a, b) {
+  const steps = Math.ceil(dist(a, b) / (CELL / 2));
+  for (let i = 1; i < steps; i++) {
+    const x = a.x + (b.x - a.x) * i / steps, y = a.y + (b.y - a.y) * i / steps;
+    if (!isFree(Math.floor(x / CELL), Math.floor(y / CELL))) return false;
+  }
+  return true;
+}
+function findPath(from, to) {
+  const s = nearestFree(cellOf(from)), g = nearestFree(cellOf(to));
+  const N = GW * GH, gScore = new Float32Array(N).fill(Infinity), came = new Int32Array(N).fill(-1);
+  const closed = new Uint8Array(N);
+  const si = s.gy * GW + s.gx, gi = g.gy * GW + g.gx;
+  const h = i => { const x = i % GW, y = (i / GW) | 0; const dx = Math.abs(x - g.gx), dy = Math.abs(y - g.gy); return Math.max(dx, dy) + 0.414 * Math.min(dx, dy); };
+  const open = [si]; gScore[si] = 0;
+  const f = new Float32Array(N).fill(Infinity); f[si] = h(si);
+  while (open.length) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (f[open[i]] < f[open[bi]]) bi = i;
+    const cur = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    if (cur === gi) break;
+    if (closed[cur]) continue;
+    closed[cur] = 1;
+    const cx = cur % GW, cy = (cur / GW) | 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = cx + dx, ny = cy + dy;
+      if (!isFree(nx, ny)) continue;
+      if (dx && dy && (!isFree(cx + dx, cy) || !isFree(cx, cy + dy))) continue;
+      const ni = ny * GW + nx, ng = gScore[cur] + (dx && dy ? 1.414 : 1);
+      if (ng < gScore[ni]) { gScore[ni] = ng; came[ni] = cur; f[ni] = ng + h(ni); open.push(ni); }
+    }
+  }
+  const cells = [];
+  for (let i = gi; i !== -1 && i !== si; i = came[i]) cells.push({ x: (i % GW) * CELL + CELL / 2, y: ((i / GW) | 0) * CELL + CELL / 2 });
+  cells.reverse();
+  cells.push({ x: to.x, y: to.y });
+  // accorcia la strada dove c'è linea libera
+  const out = [];
+  let anchor = from, i = 0;
+  while (i < cells.length) {
+    let j = cells.length - 1;
+    while (j > i && !lineFree(anchor, cells[j])) j--;
+    out.push(cells[j]); anchor = cells[j]; i = j + 1;
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stato della giornata
+// ─────────────────────────────────────────────────────────────
+const SKIN = ['#f1c7a3', '#e0ac85', '#b97c52', '#7a4b2e'];
+const HAIR = ['#2b1d14', '#6b4226', '#d8b25a', '#141414', '#b8b8b8', '#8b3a1a'];
+const SHIRTS = ['#e05a47', '#f2b134', '#6ab04c', '#9b59b6', '#e67e22', '#95a5a6', '#34495e', '#c0392b', '#1abc9c', '#f5f5f0'];
+const PANTS = ['#2c3e50', '#3b3b44', '#5a4a3a', '#1f2a44'];
+const STAFF_SHIRT = '#2a6ad8';
+
+const WEEKDAYS = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+const SESSION_TITLES = ['Foto con iPhone', 'Disegno su iPad', 'Musica con GarageBand', 'Video con iPhone', 'Primi passi su Mac'];
+// Gennaio: poca gente. Arrivi l'ora, per ora del giorno.
+const RATE = { 10: 18, 11: 24, 12: 28, 13: 28, 14: 26, 15: 27, 16: 29, 17: 33, 18: 34, 19: 22 };   // uno store pieno quasi tutto il giorno
+
+let game;
+let chosenMode = window.PL_SPECIALIST_MODE !== undefined
+  ? (window.PL_SPECIALIST_MODE === false ? 'observation' : 'career')
+  : (window.PLCareerSave.loadMode() || 'career');
+let SPECIALIST_ON = chosenMode === 'career';
+let modePicking = false;
+let careerStarted = false;
+let careerPromotionNotice = '';
+let careerCheckpoint = window.PLCareerSave.load();
+let observation = null;
+
+// La squadra: 43 persone, tutte full time, 5 giorni su 7. Ogni livello ha un tetto di competenza,
+// una resistenza allo stress e un vantaggio proprio (vendita, riparazioni, conversione dal Today at Apple).
+const TIER = {
+  S:  { label: 'Specialist', area: 'floor', cap: 75, stress: 1, sales: 0, badge: '#ffffff' },
+  E:  { label: 'Expert', area: 'floor', cap: 90, stress: 0.85, sales: 0.05, badge: '#f2b134' },
+  P:  { label: 'Pro', area: 'floor', cap: 100, stress: 0.7, sales: 0.1, badge: '#e67e22' },
+  TS: { label: 'Technical Specialist', area: 'bar', cap: 75, stress: 1, skill: 0, badge: '#ffffff' },
+  TE: { label: 'Technical Expert', area: 'bar', cap: 90, stress: 0.85, skill: 1, badge: '#f2b134' },
+  G:  { label: 'Genius', area: 'bar', cap: 100, stress: 0.7, skill: 2, badge: '#e67e22' },
+  C:  { label: 'Creative', area: 'creative', cap: 80, stress: 0.9, convert: 0.2, badge: '#e36bb5' },
+  CP: { label: 'Creative Pro', area: 'creative', cap: 95, stress: 0.75, convert: 0.35, badge: '#e36bb5' },
+  OP: { label: 'Operations', area: 'ops', cap: 90, stress: 0.9, badge: '#6ab04c' },
+  L:  { label: 'Lead', area: 'lead', cap: 100, stress: 0.7, badge: '#9b59b6' },
+};
+const ROSTER = {
+  S: ['Luca', 'Giulia', 'Marco', 'Elena', 'Anna', 'Valentina', 'Simone', 'Matteo', 'Alessia', 'Federico', 'Irene', 'Tommaso'],
+  E: ['Sara', 'Francesca', 'Lorenzo', 'Martina', 'Andrea', 'Beatrice'],
+  P: ['Giorgio', 'Silvia', 'Riccardo'],
+  TS: ['Paolo', 'Chiara', 'Nicola', 'Elisa', 'Stefano', 'Camilla', 'Gabriele', 'Noemi', 'Pietro', 'Sofia'],
+  TE: ['Roberto', 'Ilaria', 'Emanuele', 'Laura', 'Daniele'],
+  G: ['Massimo', 'Veronica'],
+  C: ['Davide', 'Greta', 'Filippo'],
+  CP: ['Arianna', 'Leonardo'],
+  OP: ['Fabio', 'Carla', 'Mattia', 'Giada', 'Alberto', 'Serena'],
+  L: ['Cristina', 'Michele', 'Valeria'],
+};
+// si parte da un team poco esperto: chi è a un livello più alto parte più avanti
+const COMP_START = { S: [15, 35], E: [45, 60], P: [60, 72], TS: [15, 35], TE: [45, 60], G: [62, 72], C: [25, 40], CP: [50, 62], OP: [35, 55], L: [70, 85] };
+// due giorni liberi a testa, solo in settimana (1 = lunedì … 5 = venerdì): nel weekend lavorano tutti
+const OFF_PAIRS = [[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]];
+const TEAM = {};
+let rosterIndex = 0;
+for (const [tier, names] of Object.entries(ROSTER)) for (const name of names) {
+  TEAM[name] = { tier, mot: rand(50, 85), stress: rand(15, 40), comp: rand(...COMP_START[tier]), cap: TIER[tier].cap, off: OFF_PAIRS[rosterIndex++ % 5],
+    vacWeek: Math.random() < 0.15 ? randi(0, 3) : -1 };
+}
+// in ferie per tutta la settimana (giorni 1–7, 8–14, …)
+const onVacation = (name, day) => TEAM[name].vacWeek === Math.floor((day - 1) / 7) % 4;
+{
+}
+// La notte lo stress scende. Il giocatore conserva motivazione sociale e competenza acquisita.
+// Stress alto a fine giornata: il giorno dopo si rischia la malattia
+function overnight(focus = { op: 0 }) {
+  for (const [name, t] of Object.entries(TEAM)) {
+    if (name === 'Tu' && !SPECIALIST_ON) continue;
+    if (t.sick) { t.sick = false; t.sickTomorrow = false; t.stress = 20; continue; }
+    if (t.sickTomorrow || (t.stress > 70 && Math.random() < (t.stress - 70) / 60)) t.sick = true;
+    t.sickTomorrow = false;
+    t.stress *= 0.7;
+    if (name !== 'Tu') {
+      t.mot += (60 - t.mot) * 0.15;
+      t.comp = Math.min(t.cap, clamp(t.comp - 0.2 + 1.0 * focus.op * (1 - t.comp / 120)));
+    }
+  }
+}
+
+const clamp = v => Math.max(0, Math.min(100, v));
+function bump(s, key, d) {
+  if (s.isPlayer && key === 'comp' && d > 0) d *= window.PLCareerProgression.learningRate(s.stats);
+  s.stats[key] = key === 'comp' ? Math.min(s.stats.cap, clamp(s.stats.comp + d)) : clamp(s.stats[key] + d);
+}
+function careerTeamClimate() {
+  let total = 0, weight = 0;
+  for (const colleague of game.staff) {
+    if (colleague.isPlayer || colleague.gone || colleague.state === 'leavingSick' || !Number.isFinite(colleague.stats.mot)) continue;
+    const influence = colleague.role === 'lead' ? 2 : 1;
+    total += colleague.stats.mot * influence; weight += influence;
+  }
+  return weight ? total / weight : null;
+}
+// I gettoni del Brief: game.focus = { op, sales, cel }, da 0 a 3 ciascuno
+const F = () => game.focus;
+// La tattica del floor si sceglie all'apertura e si può cambiare alle 13 e alle 16
+const TACTICS = {
+  equilibrio: { name: 'Equilibrio', desc: 'Né troppo veloci né troppo lenti: la base da cui partire.',
+    pace: 1, need: 0, buy: 0, attach: 1, care: 0, stress: 1 },
+  vendita: { name: 'Vendita', desc: 'Domande sul bisogno, demo complete, accessorio e AppleCare sempre proposti. Più vendite e più attach, ma più stress e clienti meno contenti se il team è poco esperto.',
+    pace: 1.1, need: 0.1, buy: 0.07, attach: 1.45, care: -2.5, stress: 1.3 },
+  qualita: { name: 'Qualità', desc: 'Tempo con ogni cliente e niente fretta: esperienza migliore e meno stress, ma ogni vendita dura di più e chi aspetta aspetta di più.',
+    pace: 1.3, need: 0.12, buy: 0.03, attach: 0.85, care: 4, stress: 0.75 },
+  velocita: { name: 'Velocità', desc: 'Si va dritti al punto: si servono più clienti e le attese calano, ma i bisogni emergono meno e si vende meno.',
+    pace: 0.7, need: -0.2, buy: -0.05, attach: 0.7, care: -1, stress: 1.15 },
+};
+const TACTIC_ORDER = ['equilibrio', 'vendita', 'qualita', 'velocita'];
+const T = s => !s || TIER[s.tier].area === 'floor' ? TACTICS[game.tactic || 'equilibrio'] : TACTICS.equilibrio;
+const pushed = s => game.push && game.time < game.push.until && TIER[s.tier].area === game.push.area;
+const pace = s => (1.3 - 0.6 * s.stats.mot / 100) * (pushed(s) ? 0.8 : 1) * (s.role === 'specialist' ? T(s).pace : 1) *
+  (s.isPlayer ? window.PLCareerProgression.learningTime(s.stats) : 1); // motivazione e pratica → più veloce; la promozione conserva la rapidità acquisita
+// al Genius Bar si sbaglia circa una riparazione su venti; meno con più competenza
+const errorChance = (s, c) => (s.role === 'genius' ? 0.045 * (1.3 - s.stats.comp / 100) : 0.1 * (1 - s.stats.comp / 100)) * (1 - 0.25 * F().op) * ddSupport(s, c); // competenza e DD Support → meno errori
+// DD Support: meno errori al Bar, molti meno sul tipo di riparazione scelto
+function tryProposal(c, key, chance) {
+  if (c[key]) return false;
+  c[key] = true;
+  return Math.random() < chance;
+}
+function ddSupport(s, c) {
+  if (!ddOn('support') || s.role !== 'genius' || !ddInvolved(s)) return 1;
+  const match = c && c.repair !== undefined && (game.dd.target === 'complesse' ? c.repair === 2 : c.repair <= 1);
+  return Math.max(0.1, 1 - (match ? 0.55 : 0.2) * ddMult());
+}
+const attachChance = s => ((0.15 + 0.45 * s.stats.comp / 100) * (1 + 0.25 * F().sales) + (TIER[s.tier].sales || 0)) * T(s).attach; // competenza, vendita e livello → più attach
+// stress → esperienza peggiore; spingere le vendite senza competenza si sente
+const care = s => 12 - 0.22 * s.stats.stress - 2 * F().sales * (1 - s.stats.comp / 100) - (pushed(s) ? 3 : 0) + T(s).care * (T(s).care < 0 ? 1.4 - s.stats.comp / 100 : 1);
+
+// Il tempo del giorno: a gennaio a Milano piove spesso. Con la pioggia i clienti sono più nervosi
+// (più scortesi, meno pazienti, partono da un'esperienza più bassa) e chi passa solo a guardare resta a casa.
+const WEATHER = {
+  sole:     { name: 'sole', icon: '☀️', say: 'C\'è il sole, in piazza passerà tanta gente.' },
+  nuvoloso: { name: 'nuvoloso', icon: '☁️', say: 'Cielo grigio, niente di speciale.' },
+  pioggia:  { name: 'pioggia', icon: '🌧️', say: 'Piove: meno gente che passa a curiosare, ma chi entra sarà più nervoso.' },
+};
+const rainy = () => game.weather === 'pioggia';
+function pickWeather() { const r = Math.random(); return r < 0.35 ? 'sole' : r < 0.68 ? 'nuvoloso' : 'pioggia'; }
+
+function newDay(dayOfMonth, opts = {}) {
+  const labConfig = observation && observation.prepare(dayOfMonth, opts);
+  if (labConfig) opts = {...opts, seed: labConfig.seed, weather: labConfig.weather};
+  careerPromotionNotice = '';
+  const date = new Date(2027, 0, dayOfMonth);
+  const weekend = date.getDay() === 0 || date.getDay() === 6;
+  STOOLS.forEach(s => s.taken = null);
+  SLOTS.forEach(s => s.taken = null);
+  BAR.forEach(s => s.taken = null);
+  QUEUE.forEach(s => s.taken = null);
+  EXPRESS_WAIT.forEach(s => s.taken = null);
+  game = {
+    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours, observationConfig: labConfig,
+    weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
+    time: OPEN - 2, speed: game ? game.speed : 1,
+    customers: [], staff: [], nextId: 1, lineIn: [], lineGB: [], lineEx: [],
+    spawnAcc: 0, selected: null, over: false,
+    log: [],
+    sessions: [
+      { start: 11 * 60, title: pick(SESSION_TITLES) },
+      { start: 14 * 60 + 30, title: pick(SESSION_TITLES) },
+      { start: 17 * 60 + 30, title: pick(SESSION_TITLES) },
+    ].map(s => ({ ...s, end: s.start + 45, state: 'planned' })),
+    reviews: [],
+    kudos: 3, moment: null, momentTypes: [], momentsDone: 0, momentsMax: randi(2, 3), lastMoment: -999, lessons: [],
+    stats: { helpAsked: 0, helpGiven: 0, helpMissed: 0, walkinBooked: 0, walkinLater: 0, apptStarted: 0, apptDelay: 0, apptLate: 0, errRepair: 0, escorts: 0, setups: 0, tradeAfter: 0, tradeIns: 0, finance: 0, batched: 0, byKind: {}, orders: 0, delivered: 0, deliverySum: 0, fromWall: 0, errBar: 0, buyDone: 0, buyWon: 0, lostLine: 0, sickNow: 0, calledIn: 0, helped: 0, todayConv: 0, entered: 0, buyers: 0, sold: 0, accessories: 0, services: 0, errors: 0, breaks: 0, rude: 0, express: 0, wallSales: 0, lost: 0, browsed: 0, genius: 0, looked: 0, today: 0, waitSum: 0, waitN: 0 },
+  };
+  game.focus = { op: 0, sales: 0, cel: 0 };
+  game.stats.setupsStarted = 0; game.stats.unfinished = 0;
+  game.stats.expressRunnerRequested = 0; game.stats.expressRunnerDelivered = 0;
+  game.orders = [];
+  game.dd = null; game.tactic = labConfig ? labConfig.tactic : 'equilibrio'; game.planning = false; game.checkpoint = false; game.history = [];
+  game.arrivals = buildArrivals(opts.seed !== undefined ? opts.seed : Math.floor(nativeRandom() * 1e9), opts);
+  game.briefing = true;
+  document.getElementById('debrief').classList.remove('show');
+  makeStaff();
+  if (playerMode) playerMode.newDay(game);
+  buildAgenda((opts.seed !== undefined ? opts.seed : Math.floor(nativeRandom() * 1e9)) + 7);
+  if (STRATEGY_ON && opts.formation && opts.formation !== game.formation) changeFormation(opts.formation, 'open');
+  if (careerStarted) saveCareerCheckpoint('start');
+  showBrief();
+  if (window.PLFloorViewUI) window.PLFloorViewUI.syncCareerCamera();
+}
+
+// I ruoli ruotano ogni 1–2 ore. In vendita chi era ai tavoli va a Point, Express o accessori e viceversa;
+// al Genius Bar il Point passa da un Technical Specialist all'altro. I posti fissi vengono prima:
+// se manca qualcuno, restano scoperti i tavoli di vendita.
+// La formazione decide quanti posti fissi ci sono: come in una squadra, si cambia modulo
+// quando mancano persone o quando la giornata lo chiede.
+const FORMATIONS = {
+  accoglienza: { name: 'Accoglienza', posts: ['point', 'point2', 'express', 'accL', 'accR'],
+    desc: 'Due Point all\'ingresso, Express e due persone agli accessori: code corte, meno Specialist ai tavoli.' },
+  tavoli: { name: 'Tavoli', posts: ['point', 'express', 'accL'],
+    desc: 'Un Point, Express e un solo lato accessori: più Specialist ai tavoli e più vendite, ma la fila all\'ingresso si allunga.' },
+  essenziale: { name: 'Essenziale', posts: ['point', 'express'],
+    desc: 'Per i giorni con poca gente: un Point e l\'Express. Gli accessori li seguono i Creative e chi è libero ai tavoli.' },
+};
+const FORMATION_ORDER = ['accoglienza', 'tavoli', 'essenziale'];
+const POST_SLOTS = {
+  point: { name: 'Point', role: 'point', post: POINT_IN, home: { x: POINT_IN.x, y: POINT_IN.y } },
+  point2: { name: 'Point 2', role: 'point', post: POINT_IN2, home: { x: POINT_IN2.x, y: POINT_IN2.y } },
+  express: { name: 'Express', role: 'express', post: EXPRESS, home: { x: EXPRESS.x, y: EXPRESS.y } },
+  accL: { name: 'accessori sinistra', role: 'accessori', side: 'L', home: { x: 160, y: 700 } },
+  accR: { name: 'accessori destra', role: 'accessori', side: 'R', home: { x: 1258, y: 800 } },
+};
+const defaultFormation = n => n >= 11 ? 'accoglienza' : n >= 8 ? 'tavoli' : 'essenziale';
+function buildFloorRota(n, formation = game.formation) {
+  const slots = FORMATIONS[formation].posts.map(k => ({ ...POST_SLOTS[k] }));
+  const zones = ['iphone', 'ipad', 'mac'], count = { iphone: 0, ipad: 0, mac: 0 };
+  for (let i = 0; slots.length < n; i++) {
+    const z = zones[i % 3], k = count[z]++;
+    const tables = TABLES.filter(t => t.product === z || (z === 'ipad' && t.product === 'watch'));
+    const t = tables[k % tables.length], right = Math.floor(k / tables.length) % 2 === 1;
+    slots.push({ name: `vendita ${PRODUCT_NAME[z]}`, role: 'specialist', zone: z,
+      home: { x: right ? t.x + t.w + 40 : t.x - 40, y: t.y === ROWS[0] ? t.y + t.h + 40 : t.y - 40 } });
+  }
+  return slots.slice(0, n);
+}
+function buildBarRota(n) {
+  const slots = [{ name: 'Point Genius Bar', role: 'point', post: POINT_GB, home: { x: POINT_GB.x, y: POINT_GB.y } }];
+  for (let k = 0; slots.length < n; k++) {
+    const b = BAR[k % BAR.length];
+    slots.push({ name: 'Genius Bar', role: 'genius', home: k < BAR.length ? { x: b.gx, y: b.gy } : { x: 470 + (k - BAR.length) * 60, y: 1420 } });
+  }
+  return slots.slice(0, n);
+}
+const CREATIVE_HOMES = [{ x: 1030, y: 1460 }, { x: 380, y: 1460 }, { x: 1030, y: 1600 }, { x: 380, y: 1600 }, { x: 700, y: 1430 }];
+const rotaOf = x => x.rota === 'bar' ? game.barRota : game.rota;
+const slotProps = (rota, i) => {
+  const r = (rota === 'bar' ? game.barRota : game.rota)[i];
+  return { rota, slot: i, role: r.role, post: r.post, side: r.side, zone: r.zone, home: r.home };
+};
+
+function makeStaff() {
+  if (game.observationConfig) { observation.makeStaff(); return; }
+  const dow = game.date.getDay(), names = Object.keys(TEAM).filter(name => name !== 'Tu');
+  const off = n => TEAM[n].off.includes(dow);
+  game.offToday = names.filter(off).length;
+  game.vacation = names.filter(n => onVacation(n, game.day));
+  game.sick = names.filter(n => TEAM[n].sick && !off(n) && !onVacation(n, game.day));
+  const here = area => names.filter(n => !off(n) && !TEAM[n].sick && !onVacation(n, game.day) && TIER[TEAM[n].tier].area === area);
+  // vendita: ogni giorno si parte da un giro diverso
+  const floor = here('floor').map((name, j, all) => ({ name, order: (j + game.day * 4) % all.length })).sort((a, b) => a.order - b.order);
+  game.formation = defaultFormation(floor.length);
+  game.rota = buildFloorRota(floor.length);
+  // Genius Bar: il Point lo fa un Technical Specialist, a turno
+  const bar = here('bar');
+  game.barRota = buildBarRota(bar.length);
+  const ts = bar.filter(n => TEAM[n].tier === 'TS');
+  const first = ts.length ? ts[game.day % ts.length] : bar[0];
+  const barOrder = first ? [first, ...bar.filter(n => n !== first)] : [];
+  const people = [
+    ...floor.map((p, i) => ({ name: p.name, ...slotProps('floor', i) })),
+    ...barOrder.map((name, i) => ({ name, ...slotProps('bar', i) })),
+    ...here('creative').map((name, i) => ({ name, role: 'creative', home: CREATIVE_HOMES[i % CREATIVE_HOMES.length] })),
+    ...here('ops').map((name, i) => ({ name, role: 'ops', home: OPS_HOMES[i % OPS_HOMES.length] })),
+    ...here('lead').map((name, i) => ({ name, role: 'lead', home: LEAD_HOMES[i % LEAD_HOMES.length] })),
+  ];
+  game.staff = people.map((p, i) => ({
+    id: 'S' + i, ...p, tier: TEAM[p.name].tier, isStaff: true,
+    x: p.home.x, y: p.home.y, path: [], state: 'idle', t: rand(2, 6),
+    look: { skin: pick(SKIN), hair: pick(HAIR), shirt: STAFF_SHIRT, pants: '#23232b' },
+    facing: p.post ? p.post.face : 'down', walk: 0, bubble: null, customer: null, served: 0, sessions: 0,
+    stats: TEAM[p.name], start: { ...TEAM[p.name] },
+  }));
+  game.staff.filter(x => x.role === 'ops').forEach(x => { x.hidden = true; x.x = BACK_DOOR.x; x.y = BACK_DOOR.y; });
+  game.cover = [];
+  game.nextRotation = OPEN + rand(60, 120);
+}
+
+function changeFormation(key, phase) {
+  game.formation = key;
+  const floor = game.staff.filter(x => x.rota === 'floor').sort((a, b) => a.slot - b.slot);
+  game.rota = buildFloorRota(floor.length);
+  floor.forEach((x, i) => {
+    x.nextSlot = undefined;
+    if (phase === 'open') {
+      Object.assign(x, slotProps('floor', i));
+      x.x = x.home.x; x.y = x.home.y; x.path = []; x.facing = x.post ? x.post.face : 'down';
+    } else if (isAvailable(x)) { x.pendingSlot = undefined; Object.assign(x, slotProps('floor', i)); x.state = 'idle'; goTo(x, x.home); }
+    else { x.pendingSlot = i; x.slot = i; }
+  });
+}
+
+function planRotation() {
+  if (game.staff.some(x => x.pendingSlot !== undefined)) { game.nextRotation = game.time + 20; return; }
+  const floor = game.staff.filter(x => x.rota === 'floor'), n = game.rota.length;
+  floor.sort((a, b) => (a.slot + 4) % n - (b.slot + 4) % n).forEach((x, i) => { x.nextSlot = i; });
+  // al Genius Bar il Point passa al prossimo Technical Specialist
+  const bar = game.staff.filter(x => x.rota === 'bar');
+  const point = bar.find(x => x.slot === 0);
+  const ts = bar.filter(x => x.tier === 'TS').sort((a, b) => a.name.localeCompare(b.name));
+  const next = ts.length > 1 && point ? ts[(ts.indexOf(point) + 1) % ts.length] : null;
+  if (next && next !== point) { point.nextSlot = next.slot; next.nextSlot = 0; }
+  const posts = floor.filter(x => game.rota[x.nextSlot].role !== 'specialist').map(x => `${x.name} → ${game.rota[x.nextSlot].name}`);
+  if (next && next !== point) posts.push(`${next.name} → Point Genius Bar`);
+  log('Cambio ruoli: ' + posts.join(', ') + ', gli altri ai tavoli');
+  game.nextRotation = game.time + rand(60, 120);
+}
+// chi è a un Point o all'Express resta al suo posto finché non arriva chi lo sostituisce
+function canLeavePost(x) {
+  if (!x.post) return true;
+  const others = game.staff.filter(y => y !== x && y.rota === x.rota);
+  if (others.some(y => y.slot === x.slot && y.path.length === 0)) return true;
+  return !others.some(y => y.nextSlot === x.slot || y.slot === x.slot);
+}
+// il cambio avviene quando la persona ha finito con il suo cliente
+function applySlot(x) {
+  Object.assign(x, slotProps(x.rota, x.nextSlot));
+  x.nextSlot = undefined;
+  x.state = 'idle'; x.t = rand(1, 3); goTo(x, x.home);
+}
+
+// Pausa di 15 minuti: chi ha un posto fisso lo passa a uno Specialist di vendita libero
+const onBreak = x => ['toBreak', 'onBreak', 'fromBreak'].includes(x.state);
+const isAvailable = x => !x.customer && !x.helpRequester && !x.expertHelp && (x.state === 'idle' || x.state === 'wander');
+function startBreak(x) {
+  if (x.post) {
+    const subRole = x.rota === 'bar' ? 'genius' : 'specialist';
+    const sub = game.staff.filter(y => y.rota === x.rota && y.role === subRole && isAvailable(y) && !y.wantsBreak).sort((a, b) => dist(a, x) - dist(b, x))[0];
+    if (!sub) return;
+    const a = x.slot, b = sub.slot;
+    Object.assign(sub, slotProps(x.rota, a)); sub.state = 'idle'; goTo(sub, sub.home);
+    Object.assign(x, slotProps(x.rota, b));
+    [x.nextSlot, sub.nextSlot] = [sub.nextSlot, x.nextSlot];
+    log(`${sub.name} prende il posto di ${x.name} (${rotaOf(x)[a].name})`);
+  }
+  x.wantsBreak = false; x.lastBreak = game.time;
+  x.state = 'toBreak'; goTo(x, { x: DOOR.x, y: DOOR.y - 20 });
+  game.stats.breaks++;
+  log(`${x.name} va in pausa 15 minuti`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Apertura: il DD del mattino e il piano dei ruoli
+// ─────────────────────────────────────────────────────────────
+// Il DD del mattino si costruisce in più scelte: argomento, focus preciso, formato, chi partecipa,
+// chi lo facilita e chi affianca un collega. Ripetere lo stesso argomento più giorni consolida l'effetto.
+const DD_TOPICS = [
+  { key: 'product', name: 'Product', area: 'floor', desc: 'Novità e domande giuste: i bisogni dei clienti emergono più spesso, soprattutto sulla linea scelta.',
+    targets: [['iphone', 'iPhone'], ['ipad', 'iPad'], ['mac', 'Mac'], ['watch', 'Apple Watch']] },
+  { key: 'support', name: 'Support', area: 'bar', desc: 'Casi tecnici e procedure: al Genius Bar si sbaglia meno sul tipo di riparazione scelto.',
+    targets: [['rapide', 'riparazioni rapide e medie'], ['complesse', 'riparazioni complesse']] },
+  { key: 'business', name: 'Business', area: 'floor', desc: 'Offerta completa: oggi si propone meglio quello che completa l\'acquisto.',
+    targets: [['applecare', 'AppleCare'], ['accessori', 'accessori pertinenti']] },
+  { key: 'creative', name: 'Creative', area: 'creative', desc: 'Today at Apple e creatività: lezioni più efficaci o Creative più forti agli accessori.',
+    targets: [['lezioni', 'partecipanti che diventano clienti'], ['accessori', 'Creative agli accessori']] },
+  { key: 'fun', name: 'Fun', area: 'all', desc: 'Un momento per la squadra: energia per tutti, o un riconoscimento a chi ne ha più bisogno.',
+    targets: [['squadra', 'gioco di squadra'], ['riconoscimenti', 'riconoscimenti mirati']] },
+];
+const DD_FORMATS = [
+  ['breve', 'Breve', 'Dieci minuti prima dell\'apertura: effetto normale, tutti in sala alle 10.'],
+  ['approfondito', 'Approfondito', 'Mezz\'ora: effetto più forte e più competenza, ma chi partecipa entra in sala alle 10:15 mentre i primi clienti aspettano.'],
+];
+const DD_WHO = [['tutti', 'Tutti'], ['floor', 'Vendita'], ['bar', 'Genius Bar'], ['creative', 'Creative']];
+const DD_HISTORY = [];                      // argomenti dei giorni passati, per le serie
+const DD = () => game.dd ? game.dd.topic : null;
+const ddOn = (topic, target) => game.dd && game.dd.topic === topic && (!target || game.dd.target === target);
+const ddMult = () => game.dd && game.dd.format === 'approfondito' ? 1.6 : 1;
+const ddStreak = topic => { let n = 1; for (let i = DD_HISTORY.length - 1; i >= 0 && DD_HISTORY[i] === topic; i--) n++; return Math.min(n, 3); };
+const ddInvolved = x => !game.dd || game.dd.who === 'tutti' || TIER[x.tier].area === game.dd.who;
+// gli effetti di oggi, per chi gioca
+function ddPreview(d) {
+  const t = DD_TOPICS.find(x => x.key === d.topic), target = t.targets.find(x => x[0] === d.target)[1];
+  const strong = d.format === 'approfondito' ? 'molto ' : '';
+  const effects = {
+    product: `In vendita i bisogni emergono ${strong}più spesso, soprattutto per ${target}. Competenza della vendita su.`,
+    support: `Al Genius Bar ${strong}meno errori sulle ${target}.${d.target === 'complesse' ? ' Le complesse si chiudono anche un po\' prima.' : ''} Competenza del Bar su.`,
+    business: d.target === 'applecare' ? `AppleCare proposto e accettato ${strong}più spesso.` : `Gli accessori proposti vengono accettati ${strong}più spesso, al tavolo e alle pareti.`,
+    creative: d.target === 'lezioni' ? `Dopo il Today at Apple ${strong}più partecipanti diventano clienti.` : `I Creative agli accessori vendono ${strong}di più nel tempo libero.`,
+    fun: d.target === 'squadra' ? `${d.format === 'approfondito' ? 'Molta' : 'Più'} motivazione e meno stress per chi partecipa.` : 'Motivazione su per le cinque persone che ne hanno più bisogno, e due complimenti in più da fare oggi.',
+  }[d.topic];
+  const streak = ddStreak(d.topic);
+  const warn = t.area !== 'all' && d.who !== 'tutti' && d.who !== t.area ? ' Attenzione: chi partecipa non è la squadra che ne beneficia di più.' : '';
+  return effects + (streak > 1 ? ` Serie di ${streak} giorni: la competenza cresce di più.` : '') + warn;
+}
+const avgTeam = k => game.staff.length ? Math.round(game.staff.reduce((a, x) => a + x.stats[k], 0) / game.staff.length) : 0;
+// ─────────────────────────────────────────────────────────────
+// Livelli: ogni giorno la leadership detta un focus, e tocca a te trovare la strategia giusta
+// ─────────────────────────────────────────────────────────────
+const OBJ = {
+  persi:     { label: 'Clienti persi', better: -1, count: true, get: () => game.stats.lost },
+  conv:      { label: 'Conversion in vendita', unit: '%', better: 1, get: () => game.stats.buyDone ? Math.round(game.stats.buyWon / game.stats.buyDone * 100) : 0 },
+  applecare: { label: 'AppleCare venduti', better: 1, count: true, get: () => game.stats.services },
+  accessori: { label: 'Accessori venduti', better: 1, count: true, get: () => game.stats.accessories + game.stats.express + game.stats.wallSales },
+  nps:       { label: 'NPS', better: 1, get: () => Math.round((nps() ?? 0) * 100) },
+  npsBar:    { label: 'NPS del Genius Bar', better: 1, get: () => Math.round((nps('bar') ?? 0) * 100) },
+  errBar:    { label: 'Errori al Genius Bar', better: -1, count: true, get: () => game.stats.errBar },
+  stanchi:   { label: 'Persone con stress sopra 70', better: -1, get: () => game.staff.filter(x => x.stats.stress >= 70).length },
+  lezioni:   { label: 'Clienti nati dalle lezioni', better: 1, count: true, get: () => game.stats.todayConv },
+};
+const objValue = key => OBJ[key].get();
+const objFmt = (key, v) => `${v}${OBJ[key].unit || ''}`;
+const meets = (key, v, t) => OBJ[key].better < 0 ? v <= t : v >= t;
+function starsFor(L, v = objValue(L.goal.key)) {
+  let n = L.goal.stars.filter(t => meets(L.goal.key, v, t)).length;
+  if (L.gate && !meets(L.gate.key, objValue(L.gate.key), L.gate.min)) n = Math.min(n, 1);
+  return n;
+}
+const starStr = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+const goalLine = L => `${OBJ[L.goal.key].label}: ${L.goal.stars.map((t, i) => `${'★'.repeat(i + 1)} ${OBJ[L.goal.key].better < 0 ? 'al massimo ' : ''}${objFmt(L.goal.key, t)}`).join(' · ')}`;
+const gateLine = L => L.gate ? `Senza scendere sotto: ${OBJ[L.gate.key].label} ${objFmt(L.gate.key, L.gate.min)} (altrimenti al massimo ★)` : '';
+
+// leve: form = formazione e ruoli, tactic = tattica del floor, dd = DD del mattino
+const LEVELS = [
+  { name: 'Primo giorno', day: 5, weather: 'sole', traffic: 1.15, comp: 10, stress: 20, formation: 'essenziale', unlock: ['form'],
+    from: 'Market Leader', msg: 'Benvenuto nel tuo primo giorno da leader di Piazza Liberty. Oggi conta una cosa sola: nessun cliente deve andarsene senza essere stato seguito.',
+    goal: { key: 'persi', stars: [12, 6, 2] },
+    hint: 'Guarda dove si forma la fila: all\'ingresso o ai tavoli?',
+    lesson: 'Con un solo Point, nelle ore di punta la fila all\'ingresso si allunga e la gente se ne va. Due Point (Accoglienza) tengono la porta libera; ai tavoli resta meno gente, ma oggi bastava.' },
+  { name: 'Vendere di più', day: 7, weather: 'nuvoloso', traffic: 1, comp: 10, stress: 20, formation: 'accoglienza', unlock: ['form', 'tactic'],
+    from: 'Market Leader', msg: 'Il mese parte piano sulle vendite. Oggi voglio vedere la conversion salire: chi entra per comprare deve uscire con un prodotto.',
+    goal: { key: 'conv', stars: [54, 59, 63] },
+    hint: 'Conta più la quantità di clienti seguiti o il modo in cui li segui?',
+    lesson: 'La conversion la fa il modo di stare col cliente, non il numero di persone ai tavoli. Con un team ancora poco esperto la tattica Qualità chiude di più: c\'è tempo per far emergere il bisogno. Vendita aiuta, ma l\'esperienza ne risente; Velocità fa perdere vendite.' },
+  { name: 'AppleCare', day: 6, weather: 'sole', traffic: 1, comp: 15, stress: 20, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    from: 'Market Leader', msg: 'Siamo indietro su AppleCare rispetto agli altri store. Oggi è il focus: ogni cliente deve sapere cosa gli offre.',
+    goal: { key: 'applecare', stars: [28, 45, 60] },
+    hint: 'Il DD del mattino può mettere tutti sulla stessa pagina.',
+    lesson: 'Il DD Business su AppleCare è la leva più forte: tutti lo propongono, anche al Genius Bar. La tattica Vendita lo fa proporre ancora più spesso; approfondito vale di più ma il team entra tardi.' },
+  { name: 'Sabato', day: 9, weather: 'sole', traffic: 1, comp: 20, stress: 25, formation: 'tavoli', unlock: ['form', 'tactic', 'dd'],
+    from: 'Market Leader', msg: 'Sabato, il giorno più pieno della settimana. Con tanta gente l\'esperienza crolla facilmente: oggi conta l\'NPS.',
+    goal: { key: 'nps', stars: [45, 58, 70] },
+    hint: 'Con tanta gente conta sia la porta sia il tempo dato a ogni cliente. E lo stress, a fine giornata, si paga.',
+    lesson: 'Il sabato servono due Point per non perdere gente all\'ingresso e la tattica Qualità per far stare bene chi entra. Le pause date al momento giusto tengono basso lo stress.' },
+  { name: 'Piove', day: 4, weather: 'pioggia', traffic: 1, comp: 20, stress: 25, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    from: 'Market Leader', msg: 'Piove su Milano: meno curiosi, ma chi entra è nervoso e c\'è qualche cliente scortese in più. Proteggi l\'esperienza.',
+    goal: { key: 'nps', stars: [48, 64, 68] },
+    hint: 'Con meno gente in giro puoi permetterti di rallentare.',
+    lesson: 'Con la pioggia entra meno gente: si può rallentare (Qualità) senza allungare le file, e i clienti nervosi si calmano quando hanno tutto il tempo che serve. Vendita, oggi, li irrita.' },
+  { name: 'Accessori', day: 8, weather: 'nuvoloso', traffic: 1, comp: 20, stress: 25, formation: 'essenziale', unlock: ['form', 'tactic', 'dd'],
+    from: 'Market Leader', msg: 'Gli accessori sono sotto obiettivo da tre settimane. Oggi pareti, Express e tavoli: ogni vendita deve avere il suo accessorio.',
+    goal: { key: 'accessori', stars: [95, 110, 122] },
+    hint: 'Gli accessori si vendono in tre posti diversi.',
+    lesson: 'Gli accessori si vendono alle pareti (servono persone lì: Accoglienza ne mette due), all\'Express e al tavolo. Il DD Business sugli accessori e la tattica Vendita alzano l\'attach.' },
+  { name: 'Genius Bar sotto pressione', day: 5, weather: 'nuvoloso', traffic: 1, comp: 15, stress: 25, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    sick: { bar: 2 }, mix: { genius: 0.33, buy: 0.3 }, repairs: [0.3, 0.35, 0.35],
+    from: 'Market Leader', msg: 'Due Technical Specialist a casa malati e tante riparazioni complesse in agenda. Il Genius Bar deve tenere: oggi conto gli errori.',
+    goal: { key: 'errBar', stars: [18, 12, 9] },
+    hint: 'Gli errori nascono dalla competenza, e la competenza si può preparare la mattina.',
+    lesson: 'Il DD Support riduce gli errori al Genius Bar, molto di più sul tipo di riparazione scelto: oggi le complesse. Il formato approfondito prepara meglio, ma il Bar apre alle 10:15 con la coda già lunga: oggi conviene quello breve. Le tattiche del floor qui non contano.' },
+  { name: 'Squadra stanca', day: 7, weather: 'nuvoloso', traffic: 1, comp: 25, stress: 55, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    gate: { key: 'nps', min: 30 },
+    from: 'Market Leader', msg: 'Dopo il weekend la squadra è a pezzi. Oggi voglio arrivare a sera senza nessuno al limite, senza che i clienti se ne accorgano.',
+    goal: { key: 'stanchi', stars: [9, 6, 3] },
+    hint: 'Ogni leva ha un costo in stress. Le pause e i complimenti sono tue.',
+    lesson: 'Un DD Fun abbassa lo stress di tutti già dal mattino, la tattica Qualità è la meno stressante, e le pause vanno date a chi sale sopra 60 prima che arrivi a 70.' },
+  { name: 'Today at Apple', day: 3, weather: 'nuvoloso', traffic: 1, comp: 25, stress: 25, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    mix: { look: 0.22, buy: 0.33 },
+    from: 'Market Leader', msg: 'Domenica con tre sessioni Today at Apple. Voglio che le lezioni portino clienti: chi partecipa deve uscire con un prodotto.',
+    goal: { key: 'lezioni', stars: [2, 6, 9] },
+    hint: 'Chi tiene le lezioni?',
+    lesson: 'Sono i Creative a trasformare i partecipanti in clienti: il DD Creative sulle lezioni li prepara a farlo, e chi si ferma al Today at Apple entra in vendita.' },
+  { name: 'Lancio iPhone', day: 9, weather: 'pioggia', traffic: 1.1, comp: 30, stress: 30, formation: 'accoglienza', unlock: ['form', 'tactic', 'dd'],
+    sick: { floor: 3 }, mix: { buy: 0.48 }, products: ['iphone', 'iphone', 'iphone', 'iphone', 'ipad', 'mac', 'watch'],
+    gate: { key: 'nps', min: 35 },
+    from: 'Market Leader', msg: 'Sabato di lancio, piove e tre persone della vendita sono a casa. Tutti vogliono il nuovo iPhone: conversion alta, ma senza rovinare l\'esperienza.',
+    goal: { key: 'conv', stars: [60, 66, 70] },
+    hint: 'Una sola leva non basta: guarda l\'NPS alle 13 e alle 16 e correggi.',
+    lesson: 'Il lancio chiede tutto insieme: il DD Product sull\'iPhone fa emergere il bisogno, la tattica Vendita chiude di più ma con la squadra sotto pressione l\'NPS crolla. Si vince alternando: Vendita finché l\'NPS regge, Qualità quando scende, o un DD Fun che regge lo stress.' },
+];
+const SAVE_KEY = 'plgame.levels';
+let progress = {};
+try { progress = JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { progress = {}; }
+const saveProgress = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) {} };
+const unlocked = i => i === 0 || (progress[i - 1] && progress[i - 1].stars > 0);
+const STRATEGY_ON = false;          // per ora niente scelte di strategia: formazione, tattica, DD e pause delle 13 e delle 16
+const lever = k => STRATEGY_ON && (!game.level || game.level.unlock.includes(k));
+
+// la squadra del livello: stessa partenza a ogni tentativo
+function presetTeam(L, r) {
+  for (const [name, t] of Object.entries(TEAM)) {
+    const [a, b] = COMP_START[t.tier];
+    t.comp = Math.min(t.cap, a + (b - a) * r() + L.comp); t.stress = clamp(L.stress + (r() - 0.5) * 20); t.mot = clamp(65 + (r() - 0.5) * 30);
+    t.sick = false; t.sickTomorrow = false; t.vacWeek = -1;
+  }
+  for (const [area, n] of Object.entries(L.sick || {})) {
+    const dow = new Date(2027, 0, L.day).getDay();
+    Object.keys(TEAM).filter(k => TIER[TEAM[k].tier].area === area && !TEAM[k].off.includes(dow) && TEAM[k].tier !== 'G' && TEAM[k].tier !== 'P')
+      .sort(() => r() - 0.5).slice(0, n).forEach(k => { TEAM[k].sick = true; });
+  }
+}
+function startLevel(i) {
+  const L = LEVELS[i];
+  seedRandom(7919 * (i + 1));
+  presetTeam(L, mulberry(31 * (i + 1)));
+  newDay(L.day, { ...L, level: L, levelIndex: i, seed: 104729 * (i + 1) });
+  document.getElementById('levels').classList.remove('show');
+}
+function showLevels() {
+  seedRandom(null);
+  document.getElementById('debrief').classList.remove('show');
+  document.getElementById('lvList').innerHTML = LEVELS.map((L, i) => {
+    const p = progress[i], open = unlocked(i);
+    return `<button data-lv="${i}" ${open ? '' : 'disabled'}><span class="lvN">${i + 1}</span><span class="lvName">${L.name}<br><span class="sub">${open ? OBJ[L.goal.key].label : 'Bloccato: prendi almeno una stella nel livello prima'}</span></span><span class="lvStars">${open ? starStr(p ? p.stars : 0) : '🔒'}</span></button>`;
+  }).join('');
+  document.getElementById('levels').classList.add('show');
+}
+document.getElementById('lvList').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-lv]'); if (b && !b.disabled) startLevel(+b.dataset.lv);
+});
+document.getElementById('lvFree').addEventListener('click', () => {
+  document.getElementById('levels').classList.remove('show');
+  seedRandom(null); newDay(7);
+});
+
+// ── Apertura: messaggio della leadership e strategia iniziale
+const LEADER_LOOK = { skin: '#e0ac85', hair: '#141414', shirt: '#34495e', pants: '#23232b' };
+function strategyHtml(phase) {
+  const parts = [];
+  const chips = (key, list, cur) => `<div class="chips">${list.map(([k, l]) => `<button data-${key}="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  if (lever('form')) parts.push(`
+    <h3>Formazione</h3>
+    <div class="sub">In vendita oggi siete in ${game.staff.filter(x => x.rota === 'floor').length}.</div>
+    ${chips('form', FORMATION_ORDER.map(k => [k, FORMATIONS[k].name]), game.formation)}
+    <div class="ddDesc">${FORMATIONS[game.formation].desc}</div>`);
+  if (lever('tactic')) parts.push(`
+    <h3>Tattica del floor</h3>
+    ${chips('tac', TACTIC_ORDER.map(k => [k, TACTICS[k].name]), game.tactic)}
+    <div class="ddDesc">${TACTICS[game.tactic].desc}</div>`);
+  if (phase === 'open' && lever('dd')) {
+    const d = game.dd;
+    parts.push(`<h3>DD del mattino</h3>
+      ${chips('dd', [['', 'Nessuno'], ...DD_TOPICS.map(x => [x.key, x.name])], d ? d.topic : '')}`);
+    if (d) {
+      const t = DD_TOPICS.find(x => x.key === d.topic);
+      parts.push(`<div class="ddDesc">${t.desc}</div>
+        <div class="sub">Su cosa</div>${chips('ddt', t.targets, d.target)}
+        <div class="sub">Formato</div>${chips('ddf', DD_FORMATS, d.format)}
+        <div class="ddDesc"><b>Oggi:</b> ${ddPreview(d)}</div>`);
+    } else parts.push('<div class="ddDesc">Si apre subito, senza DD.</div>');
+  }
+  if (lever('form')) parts.push(`<details id="roles-${phase}" ${game.rolesOpen ? 'open' : ''}><summary>Piano dei ruoli</summary>${planHtml(phase === 'open' ? 'open' : 'rotation')}</details>`);
+  return parts.join('');
+}
+function showBrief() {
+  if (game.observationConfig) { game.briefing = false; document.getElementById('brief').classList.remove('show'); return; }
+  const w = WEATHER[game.weather], L = game.level;
+  document.getElementById('brTitle').textContent = SPECIALIST_ON ? 'Carriera · ' + window.PLCareerProgression.view(TEAM.Tu).role : 'Osservazione · Apertura';
+  document.getElementById('brDate').textContent = `${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio · ${w.icon} ${w.name}${game.date.getDay() === 6 ? ' · sabato, il giorno più pieno' : game.weekend ? ' · domenica, tanta gente' : ''}`;
+  document.getElementById('brGoal').innerHTML = L ? `
+    <div class="brSay"><svg class="ava" viewBox="0 0 14 20" aria-hidden="true" shape-rendering="crispEdges"></svg><div><b>${L.from}</b> <span class="sub">dalla leadership</span><br>«${L.msg}»</div></div>
+    <div class="goalBox"><b>🎯 ${goalLine(L)}</b>${L.gate ? `<br><span class="sub">${gateLine(L)}</span>` : ''}<br><span class="sub">Spunto: ${L.hint}</span></div>` : '';
+  if (L) drawAvatar(document.querySelector('#brGoal .ava'), LEADER_LOOK);
+  const stressed = game.staff.filter(x => x.stats.stress > 60).map(x => x.name).slice(0, 8);
+  document.getElementById('brTeam').innerHTML =
+    `In turno <b>${game.staff.length}</b> su ${Object.keys(TEAM).filter(name => SPECIALIST_ON || name !== 'Tu').length}` + (game.offToday ? ` · a riposo ${game.offToday}` : '') + '<br>' +
+    [['lead', 'Lead'], ['floor', 'Vendita'], ['bar', 'Genius Bar'], ['creative', 'Creative'], ['ops', 'Operations']].map(([a, l]) => `${l}: ` +
+      Object.keys(TIER).filter(k => TIER[k].area === a).map(k => `${game.staff.filter(x => x.tier === k).length} ${TIER[k].label}`).join(', ')).join('<br>') + '<br>' +
+    `Team: motivazione <b>${avgTeam('mot')}</b> · stress <b>${avgTeam('stress')}</b> · competenza <b>${avgTeam('comp')}</b>` +
+    (game.sick.length ? `<br>In malattia: <b>${game.sick.join(', ')}</b>` : '') +
+    (game.vacation.length ? `<br>In ferie: <b>${game.vacation.join(', ')}</b>` : '') +
+    (stressed.length ? `<br>Molto stressati: <b>${stressed.join(', ')}</b>` : '');
+  // chi è al Point apre la giornata con una battuta, anche sul tempo
+  const host = game.staff.find(x => x.post === POINT_IN) || game.staff[0];
+  const n = game.staff.length, dow = game.date.getDay();
+  const mood = dow === 6 ? 'Oggi è sabato: sarà pieno, teniamoci pronti.' : dow === 0 ? 'Domenica, arriverà tanta gente.' :
+    game.sick.length + game.vacation.length > 3 ? 'Siamo un po\' corti, organizziamoci bene.' : 'Giornata tranquilla, per ora.';
+  document.getElementById('brSay').innerHTML = `<svg class="ava" viewBox="0 0 14 20" aria-hidden="true" shape-rendering="crispEdges"></svg><div><b>${host.name}</b> <span class="sub">${TIER[host.tier].label}</span><br>«Stiamo aprendo! Oggi siamo in ${n}. ${mood} ${w.say}»</div>`;
+  drawAvatar(document.querySelector('#brSay .ava'), host.look);
+  const strat = strategyHtml('open');
+  document.getElementById('brOpts').innerHTML = strat ? `<h3 class="big">Strategia iniziale</h3>${strat}` : '';
+  const shift = playerMode && playerMode.view().shift;
+  document.getElementById('brLeft').textContent = SPECIALIST_ON
+    ? `Il tuo turno: ${fmt(shift.start)}–${fmt(shift.end)} (${shift.hours} ore, contratto ${shift.weeklyHours} ore/settimana). Lavori da mercoledì a domenica; lunedì e martedì riposi. Segui una persona alla volta. Se lo stress è alto, finisci la visita e recupera con una pausa di 15 minuti.`
+    : 'Il team segue tutti i clienti in autonomia. Osserva il floor, seleziona le persone e guarda come cambiano i risultati dello store.';
+  document.getElementById('openStore').textContent = SPECIALIST_ON ? 'Entra sul floor' : 'Osserva il floor';
+  document.getElementById('brief').classList.add('show');
+}
+const bestBy = () => (game.staff.filter(x => ['E', 'P', 'TE', 'G', 'CP'].includes(x.tier)).sort((a, b) => b.stats.comp - a.stats.comp)[0] || game.staff[0]).name;
+// scelte di strategia, valide sia all'apertura sia alle pause delle 13 e delle 16
+function strategyClick(b, phase) {
+  if (b.dataset.form) { changeFormation(b.dataset.form, phase); return true; }
+  if (b.dataset.tac) { game.tactic = b.dataset.tac; return true; }
+  if (b.dataset.dd !== undefined) {
+    game.dd = b.dataset.dd ? { topic: b.dataset.dd, target: DD_TOPICS.find(x => x.key === b.dataset.dd).targets[0][0], format: 'breve', who: 'tutti', by: bestBy(), coach: '' } : null;
+    return true;
+  }
+  if (b.dataset.ddt) { game.dd.target = b.dataset.ddt; return true; }
+  if (b.dataset.ddf) { game.dd.format = b.dataset.ddf; return true; }
+  return false;
+}
+document.getElementById('brOpts').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (strategyClick(b, 'open')) { showBrief(); return; }
+  if (b.dataset.post) { openPicker('open', b.dataset.rota, +b.dataset.post); }
+});
+document.addEventListener('toggle', ev => { if (ev.target.id && ev.target.id.startsWith('roles-')) game.rolesOpen = ev.target.open; }, true);
+const stratText = () => [lever('form') ? FORMATIONS[game.formation].name : '', lever('tactic') ? 'tattica ' + TACTICS[game.tactic].name : ''].filter(Boolean).join(', ');
+document.getElementById('openStore').addEventListener('click', () => startDay({ dd: game.dd }));
+
+// ── Le pause delle 13 e delle 16: il punto della situazione e, se serve, si cambia strategia
+const CHECKPOINTS = [13 * 60, 16 * 60];
+function goalStatus(L) {
+  const k = L.goal.key, v = objValue(k), o = OBJ[k];
+  // quota della giornata già passata, pesata sull'affluenza prevista ora per ora (il pomeriggio è più pieno)
+  const load = t => { let x = 0; for (let m = OPEN; m < Math.min(t, LAST_ENTRY); m += 5) x += RATE[Math.floor(m / 60)] || 6; return x; };
+  const frac = Math.max(0.05, load(game.time) / load(LAST_ENTRY));
+  const proj = o.count ? Math.round(v / frac) : v;
+  const st = starsFor(L, proj);
+  return `<div class="goalBox"><b>🎯 ${o.label}: ${objFmt(k, v)}</b>${o.count ? ` finora, a questo ritmo circa <b>${objFmt(k, proj)}</b> a fine giornata` : ''} → <b class="stars">${starStr(st)}</b>
+    <br><span class="sub">${goalLine(L)}</span>${L.gate ? `<br><span class="sub">${OBJ[L.gate.key].label} ora ${objFmt(L.gate.key, objValue(L.gate.key))}, minimo ${objFmt(L.gate.key, L.gate.min)}</span>` : ''}</div>`;
+}
+function showCheckpoint() {
+  game.checkpoint = true;
+  const s = game.stats, hot = game.staff.filter(x => x.stats.stress >= 70).length;
+  const L = game.level;
+  document.getElementById('ckTitle').textContent = `Il punto delle ${fmt(game.time)}`;
+  document.getElementById('ckBody').innerHTML = (L ? goalStatus(L) : '') + `
+    <div class="brTeam">
+      NPS <b>${fmtNps(nps())}</b> · Vendita ${fmtNps(nps('vendita'))} · Bar ${fmtNps(nps('bar'))}<br>
+      Conversion <b>${objValue('conv')}%</b> · AppleCare ${s.services} · accessori ${objValue('accessori')}<br>
+      Clienti persi <b>${s.lost}</b>${s.lostLine ? ` (${s.lostLine} per la fila al Point)` : ''} · in fila ora ${game.lineIn.length}<br>
+      Team: stress medio <b>${avgTeam('stress')}</b> · sopra 70: <b>${hot}</b> · motivazione ${avgTeam('mot')}
+    </div>
+    <div class="sub">Se va tutto bene, continua così. Altrimenti cambia strategia: vale da adesso.</div>
+    ${strategyHtml('check')}
+    <button class="on" id="ckGo">Continua così</button>`;
+  document.getElementById('check').classList.add('show');
+}
+document.getElementById('ckBody').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.id === 'ckGo') {
+    game.checkpoint = false; document.getElementById('check').classList.remove('show');
+    game.history.push(`${fmt(game.time)}: ${stratText()}`);
+    return;
+  }
+  if (strategyClick(b, 'rotation')) { showCheckpoint(); document.getElementById('ckGo').textContent = 'Applica e continua'; return; }
+  if (b.dataset.post) openPicker('rotation', b.dataset.rota, +b.dataset.post, 'ckBody');
+});
+
+function startDay(opts = {}) {
+  if (SPECIALIST_ON && !careerStarted) {
+    careerStarted = true;
+    saveCareerCheckpoint('start');
+    if (window.PLFloorViewUI) window.PLFloorViewUI.syncCareerCamera();
+  }
+  game.focus = { op: opts.op || 0, sales: opts.sales || 0, cel: opts.cel || 0 };   // i gettoni restano solo per le simulazioni di prova
+  game.dd = opts.dd ? { target: DD_TOPICS.find(x => x.key === opts.dd.topic).targets[0][0], format: 'breve', who: 'tutti', coach: '', ...opts.dd } : game.dd || null;
+  game.briefing = false;
+  document.getElementById('brief').classList.remove('show');
+  game.history = [`Apertura: ${[stratText() || 'formazione e ruoli decisi dalla squadra', game.dd ? `DD ${DD_TOPICS.find(x => x.key === game.dd.topic).name} (${DD_TOPICS.find(x => x.key === game.dd.topic).targets.find(x => x[0] === game.dd.target)[1]}, ${game.dd.format})` : (lever('dd') ? 'senza DD' : '')].filter(Boolean).join(', ')}`];
+  const focus = game.focus;
+  if (game.dd) {
+    const d = game.dd, t = DD_TOPICS.find(x => x.key === d.topic), m = ddMult();
+    const by = game.staff.find(x => x.name === d.by), coach = game.staff.find(x => x.name === d.coach);
+    const who = game.staff.filter(ddInvolved);
+    const streak = ddStreak(d.topic);
+    DD_HISTORY.push(d.topic);
+    log(`Si apre: ${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio · DD ${t.name} (${t.targets.find(x => x[0] === d.target)[1]}, ${d.format})${by ? ' con ' + by.name : ''}`);
+    if (by) { bump(by, 'comp', 1.5 * m); bump(by, 'mot', 4); }
+    if (coach) { bump(coach, 'comp', 2 * m); bump(coach, 'mot', 2); if (by) bump(by, 'mot', 2); }
+    // competenza che resta: più forte se l'argomento si ripete nei giorni
+    const grow = 0.5 * m * (1 + 0.5 * (streak - 1));
+    if (t.area !== 'all') who.filter(x => TIER[x.tier].area === t.area).forEach(x => bump(x, 'comp', grow));
+    if (d.topic === 'fun' && d.target === 'squadra') who.forEach(x => { bump(x, 'mot', 6 * m); bump(x, 'stress', -12 * m); });
+    if (d.topic === 'fun' && d.target === 'riconoscimenti') { [...who].sort((a, b) => a.stats.mot - b.stats.mot).slice(0, 5).forEach(x => bump(x, 'mot', 8 * m)); game.kudos += 2; }
+    // formato approfondito: chi partecipa entra in sala alle 10:15
+    if (d.format === 'approfondito') who.forEach((x, i) => {
+      const a = i / who.length * Math.PI * 2;
+      x.state = 'huddle'; x.until = OPEN + 15;
+      goTo(x, { x: 700 + Math.cos(a) * 200, y: 1440 + Math.sin(a) * 70 });
+    });
+  } else log(`Si apre: ${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio`);
+  // celebration: subito più motivazione e meno stress, poi il momento di squadra
+  if (focus.cel) {
+    game.staff.forEach(x => { bump(x, 'mot', 3 * focus.cel); bump(x, 'stress', -4 * focus.cel); });
+    game.staff.forEach((x, i) => {
+      const a = i / game.staff.length * Math.PI * 2;
+      x.state = 'huddle'; x.until = OPEN + 5 * focus.cel;
+      goTo(x, { x: 700 + Math.cos(a) * 200, y: 1440 + Math.sin(a) * 70 });
+    });
+  }
+  // operativa: i meno competenti vanno in formazione la prima ora, seduti al Forum
+  if (focus.op) {
+    const trainees = game.staff.filter(x => x.role === 'specialist').sort((a, b) => a.stats.comp - b.stats.comp).slice(0, focus.op);
+    trainees.forEach(x => {
+      const seat = STOOLS.find(st => !st.taken);
+      if (!seat) return;
+      seat.taken = x; x.seat = seat;
+      x.state = 'training'; x.until = OPEN + 60 + (focus.cel ? 5 * focus.cel : 0);
+      goTo(x, seat);
+    });
+  }
+}
+
+// ── Piano dei ruoli: i posti fissi e chi li copre. All'apertura si cambia subito,
+// al cambio ruoli si cambia la proposta (nextSlot), che diventa effettiva quando la persona è libera.
+const effSlot = (x, phase) => phase === 'rotation' && x.nextSlot !== undefined ? x.nextSlot : x.slot;
+function planPosts() {
+  const list = game.rota.map((r, i) => ({ rota: 'floor', i, r })).filter(p => p.r.role !== 'specialist');
+  if (game.barRota[0]) list.push({ rota: 'bar', i: 0, r: game.barRota[0] });
+  return list;
+}
+const holder = (rota, i, phase) => game.staff.find(x => x.rota === rota && effSlot(x, phase) === i);
+const personLine = x => `${x.name} <span class="sub">${x.tier} · stress <span class="${x.stats.stress >= 60 ? 'hot' : ''}">${Math.round(x.stats.stress)}</span></span>`;
+function planHtml(phase) {
+  return `<div class="posts">${planPosts().map(p => {
+    const h = holder(p.rota, p.i, phase);
+    return `<div class="post"><div class="who"><b>${p.r.name}</b><br>${h ? personLine(h) : '<span class="sub">scoperto</span>'}</div>
+      <button data-rota="${p.rota}" data-post="${p.i}">Cambia</button></div>`;
+  }).join('')}</div><div class="sub">Gli altri vanno ai tavoli${game.barRota.length > 1 ? ' e al Genius Bar' : ''}.</div>`;
+}
+function openPicker(phase, rota, i, where) {
+  const r = (rota === 'bar' ? game.barRota : game.rota)[i];
+  const cur = holder(rota, i, phase);
+  const cands = game.staff.filter(x => x.rota === rota && x !== cur && !onBreak(x)).sort((a, b) => a.stats.stress - b.stats.stress);
+  const ov = document.getElementById(where || (phase === 'open' ? 'brOpts' : 'planBody'));
+  ov.innerHTML = `<h3>Chi metti al posto «${r.name}»?</h3><div class="cands">${cands.map(x =>
+    `<button data-pick="${x.id}" data-rota="${rota}" data-slot="${i}" data-phase="${phase}">${personLine(x)}<br><span class="sub">ora: ${rotaOf(x)[effSlot(x, phase)].name}</span></button>`).join('')}</div>
+    <button data-back="${phase}">Indietro</button>`;
+}
+function assignPost(person, rota, i, phase) {
+  const cur = holder(rota, i, phase);
+  const mine = effSlot(person, phase);
+  if (phase === 'open') {
+    Object.assign(person, slotProps(rota, i));
+    if (cur) Object.assign(cur, slotProps(rota, mine));
+    for (const x of [person, cur]) if (x) { x.x = x.home.x; x.y = x.home.y; x.path = []; x.facing = x.post ? x.post.face : 'down'; }
+  } else {
+    person.nextSlot = i;
+    if (cur) cur.nextSlot = mine;
+  }
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-pick],[data-back]'); if (!b) return;
+  if (b.dataset.pick) {
+    const x = game.staff.find(y => y.id === b.dataset.pick);
+    assignPost(x, b.dataset.rota, +b.dataset.slot, b.dataset.phase);
+  }
+  const phase = b.dataset.phase || b.dataset.back;
+  if (phase === 'open') showBrief(); else if (game.checkpoint) showCheckpoint(); else showPlan();
+});
+
+// al cambio ruoli il gioco si ferma e mostra la proposta: la confermi o la cambi
+function showPlan() {
+  game.planning = true;
+  document.getElementById('planTitle').textContent = `Cambio ruoli delle ${fmt(game.time)}`;
+  document.getElementById('planSub').textContent = 'La proposta fa girare le persone tra tavoli e posti fissi. Puoi cambiarla: tieni d\'occhio lo stress.';
+  document.getElementById('planBody').innerHTML = planHtml('rotation') + '<button class="on" id="planOk">Conferma</button>';
+  document.getElementById('plan').classList.add('show');
+}
+document.getElementById('planBody').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.id === 'planOk') { game.planning = false; document.getElementById('plan').classList.remove('show'); return; }
+  if (b.dataset.post) openPicker('rotation', b.dataset.rota, +b.dataset.post);
+});
+
+function log(msg) {
+  game.log.unshift({ t: game.time, msg });
+  game.log.length = Math.min(game.log.length, 30);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Entità: movimento e fumetti
+// ─────────────────────────────────────────────────────────────
+function goTo(e, target) { e.path = findPath(e, target); e.dest = target; }
+function moveAlong(e, dt) {
+  if (e.role === 'ops' && game.observationConfig) dt /= game.observationConfig.delivery;
+  let budget = WALK * (e.role === 'ops' ? 3.3 : e.isStaff ? 1.15 : 1) * dt;
+  let moved = false;
+  while (budget > 0 && e.path.length) {
+    const p = e.path[0], d = dist(e, p);
+    if (d <= budget) { e.x = p.x; e.y = p.y; budget -= d; e.path.shift(); }
+    else {
+      const dx = (p.x - e.x) / d, dy = (p.y - e.y) / d;
+      e.x += dx * budget; e.y += dy * budget; budget = 0;
+      e.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    }
+    moved = true;
+  }
+  if (moved) e.walk += dt * 8;
+  return e.path.length === 0;
+}
+function say(e, icon, mins = 1.5) { e.bubble = { icon, until: game.time + mins }; }
+function face(e, target) {
+  const dx = target.x - e.x, dy = target.y - e.y;
+  e.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Clienti
+// ─────────────────────────────────────────────────────────────
+// Ogni cliente per un acquisto ha un bisogno che non si vede: emerge solo con la domanda giusta
+const NEEDS = {
+  iphone: [
+    { who: 'viaggia spesso per lavoro', says: 'Viaggio spesso per lavoro, il telefono mi lascia a metà giornata.', feature: 'l\'autonomia della batteria', acc: 'la batteria MagSafe' },
+    { who: 'fa tantissime foto ai figli', says: 'Faccio tantissime foto ai bambini e ho sempre la memoria piena.', feature: 'la fotocamera e lo spazio di archiviazione', acc: 'una custodia con MagSafe per il cavalletto' },
+    { who: 'ascolta musica tutto il giorno', says: 'Ascolto musica tutto il giorno, in metro e in palestra.', feature: 'l\'audio insieme agli AirPods', acc: 'gli AirPods Pro' },
+  ],
+  ipad: [
+    { who: 'disegna a mano e vuole passare al digitale', says: 'Disegno a mano, vorrei passare al digitale.', feature: 'il disegno con Apple Pencil', acc: 'l\'Apple Pencil' },
+    { who: 'studia all\'università', says: 'Sono all\'università, prendo appunti e scrivo le tesine.', feature: 'gli appunti e la scrittura', acc: 'la Magic Keyboard' },
+  ],
+  watch: [
+    { who: 'corre tre volte a settimana', says: 'Corro tre volte a settimana, vorrei lasciare il telefono a casa.', feature: 'gli allenamenti con il GPS', acc: 'un cinturino Sport Loop' },
+    { who: 'deve tenere d\'occhio il battito', says: 'Il medico mi ha detto di tenere d\'occhio il battito.', feature: 'le funzioni per la salute', acc: 'un cinturino comodo anche di notte' },
+  ],
+  mac: [
+    { who: 'monta video per il suo canale', says: 'Monto video per il mio canale, il computer che ho è lentissimo.', feature: 'la potenza nel montaggio', acc: 'un adattatore USB-C con lettore di schede SD' },
+    { who: 'lavora molto in treno', says: 'Lavoro molto in treno, mi serve qualcosa di leggero.', feature: 'l\'autonomia e il peso', acc: 'un alimentatore da viaggio' },
+  ],
+};
+
+// Profili indipendenti: conoscere la tecnologia non significa avere fretta.
+function customerProfile() {
+  const level = () => { const r = Math.random(); return r < 0.75 ? 0 : r < 0.93 ? 1 : 2; };
+  const r = Math.random();
+  return { familiarity: level(), hurry: level(), mood: r < 0.8 ? rand(72, 88) : r < 0.95 ? rand(45, 60) : rand(20, 35) };
+}
+const profileTime = c => [1.2, 1, 0.85][c.familiarity ?? 1];
+const patienceRate = c => [0.8, 1, 1.8][c.hurry ?? 1] * (game.observationConfig ? 1 / game.observationConfig.patience : 1);
+function spawnCustomer(kind, extra = {}) {
+  const c = {
+    id: game.nextId++, kind, isStaff: false,
+    x: DOOR.x + rand(-30, 30), y: DOOR.y, path: [], state: 'inLine', t: 0,
+    look: { skin: pick(SKIN), hair: pick(HAIR), shirt: pick(SHIRTS), pants: pick(PANTS) },
+    facing: 'down', walk: 0, bubble: null, staff: null, slot: null, wait: 0, lineIdx: -1,
+    exp: rainy() ? rand(61, 73) : rand(64, 76), waited: 0, servedBy: null, rude: Math.random() < (rainy() ? 0.13 : 0.08),
+    product: kind === 'buy' ? pick(['iphone', 'iphone', 'iphone', 'ipad', 'watch', 'mac', 'mac']) : null,
+    ...customerProfile(), ...extra,
+  };
+  c.initialMood = c.mood;
+  c.exp += (c.mood - 70) * 0.12;
+  c.lastProfileExp = c.exp;
+  if (c.product && !c.need) c.need = pick(NEEDS[c.product]);
+  if (kind === 'genius' && c.repair === undefined) { const r = Math.random(); c.repair = r < 0.5 ? 0 : r < 0.85 ? 1 : 2; }
+  game.customers.push(c);
+  game.stats.entered++;
+  if (game.observationLedger) window.PLObservation.recordEnter(game.observationLedger, c, game.time);
+  { const a = agendaOf(c); if (a) a.status = 'arrivato'; }
+  // chi ha un appuntamento sa dove andare: va dritto al Point del Genius Bar
+  if (c.appt !== undefined) { if (kind === 'buy') game.stats.buyers++; game.lineGB.push(c); return c; }
+  if (kind === 'buy') game.stats.buyers++;
+  game.lineIn.push(c);
+  return c;
+}
+
+function describe(c) {
+  if (c.kind === 'buy') return `cliente per ${PRODUCT_NAME[c.product]}${c.fast ? ' (sa già cosa vuole)' : ''}${c.tradeIn ? ', con Trade In' : ''}${c.finance ? ', vuole il finanziamento' : ''}`;
+  if (c.kind === 'genius') return 'cliente per assistenza';
+  if (c.kind === 'acc') return 'cliente per accessori';
+  if (c.kind === 'help') return 'cliente con una domanda veloce';
+  return 'cliente che dà un\'occhiata';
+}
+const needIcon = c => c.kind === 'buy' ? c.product : c.kind === 'genius' ? 'wrench' : c.kind === 'acc' ? 'bag' : c.kind === 'help' ? 'question' : 'eye';
+
+// Una fila davanti a un Point: chi è primo va a parlare appena il Point è libero
+function updateLine(line, post, also = []) {
+  // durante un cambio ruoli il posto può restare scoperto per poco, o avere due persone: si prende chi è pronto
+  const posts = [post, ...also];
+  // Keep serving the current post while its replacement is still occupied.
+  // Once the handoff is ready, leave the next customer for the new colleague.
+  const point = game.staff.find(s => posts.includes(s.post) && s.state === 'idle' && s.path.length === 0 &&
+    (s.nextSlot === undefined || !canLeavePost(s)));
+  line.forEach((c, i) => {
+    if (c.lineIdx === i) return;
+    c.lineIdx = i;
+    const spot = post.line[i] || { x: post.line[post.line.length - 1].x + rand(-25, 25), y: post.line[post.line.length - 1].y + (post === POINT_IN ? -30 : 0) };
+    goTo(c, spot);
+  });
+  const first = line[0];
+  if (first && point && first.path.length === 0) {
+    line.shift();
+    first.lineIdx = -1; first.state = 'toPoint'; first.point = point;
+    point.state = 'listening'; point.customer = first;
+    goTo(first, point.post.talk);
+  }
+}
+
+function standSpot(product) {
+  const t = pick(TABLES.filter(x => x.product === product));
+  const below = t.y === ROWS[0] || Math.random() < 0.5;
+  const x = t.x + rand(5, t.w - 5), y = below ? t.y + t.h + rand(28, 60) : t.y - rand(28, 50);
+  return { table: t, x, y, sx: x + (x < t.x + t.w / 2 ? -22 : 22), sy: y + 30, taken: null, standing: true };
+}
+
+// Dopo il Point: al tavolo giusto, in fila al Genius Bar o a guardarsi intorno
+function proceed(c) {
+  if (c.kind === 'buy' || c.kind === 'help') {
+    const free = SLOTS.filter(s => !s.taken && s.table.product === (c.kind === 'help' ? 'help' : c.product));
+    let slot = free.length ? pick(free) : null;
+    // posti pieni: si aspetta in piedi vicino a un tavolo giusto, e uno Specialist verrà a prenderlo
+    if (!slot) slot = standSpot(c.kind === 'help' ? 'help' : c.product);
+    slot.taken = c; c.slot = slot;
+    c.state = 'toTable'; goTo(c, slot);
+  } else if (c.kind === 'genius') {
+    c.state = 'inLine'; c.lineIdx = -1; game.lineGB.push(c);
+  } else if (c.kind === 'acc') {
+    // alla parete accessori: chi sa già cosa vuole prende e va all'Express, gli altri chiedono
+    c.side = c.side || (Math.random() < 0.5 ? 'L' : 'R');
+    c.quick = c.quick === undefined ? Math.random() < 0.6 : c.quick;
+    c.state = 'toWall';
+    goTo(c, { x: WALL_SPOT[c.side], y: c.side === 'L' ? rand(160, 1650) : rand(400, 1650) });
+  } else {
+    c.visits = randi(1, 3); lookAround(c);
+  }
+}
+
+function lookAround(c) {
+  const t = pick(TABLES);
+  const left = Math.random() < 0.5;
+  c.state = 'toLook';
+  goTo(c, { x: left ? t.x - 24 : t.x + t.w + 24, y: t.y + rand(30, t.h - 30) });
+}
+
+function afterLooking(c) {
+  const seat = Math.random() < (ddOn('creative', 'lezioni') ? 0.8 : 0.5) && STOOLS.find(s => !s.taken);
+  if (seat) { seat.taken = c; c.slot = seat; c.state = 'toSession'; goTo(c, seat); }
+  else leave(c, 'looked');
+}
+
+// Check-in al Genius Bar: se c'è un posto il Point accompagna, altrimenti si aspetta tra gli alberi
+// ── Agenda del Genius Bar. Il Bar lavora su appuntamento: fasce da 15 minuti, ogni appuntamento ne
+// occupa due (30 minuti previsti, ma la durata vera va da 10 a 45). La capacità è il numero di tecnici
+// in turno (al massimo i 12 posti). Metà dei clienti ha prenotato; chi arriva senza appuntamento riceve
+// al Point del Bar il primo orario libero e torna a quell'ora, o un altro giorno se l'agenda è piena.
+const SLOT_MIN = 15, APPT_SLOTS = 2, LAST_APPT = 19 * 60;
+const slotOf = t => Math.floor((t - OPEN) / SLOT_MIN);
+// si prenota un po' più dei posti, come si fa davvero: c'è chi non si presenta e chi finisce prima
+const OVERBOOK = 1.1;
+function agendaCap() { return Math.min(BAR.length, Math.round(OVERBOOK * game.staff.filter(x => x.rota === 'bar' && x.role === 'genius').length)); }   // mai più dei posti al Bar
+function bookSlot(from, r = Math.random) {
+  const cap = agendaCap(), last = slotOf(LAST_APPT);
+  for (let b = Math.max(0, Math.ceil((from - OPEN) / SLOT_MIN)); b <= last; b++) {
+    let ok = true; for (let k = 0; k < APPT_SLOTS; k++) if ((game.slots[b + k] || 0) >= cap) ok = false;
+    if (ok) { for (let k = 0; k < APPT_SLOTS; k++) game.slots[b + k] = (game.slots[b + k] || 0) + 1; return OPEN + b * SLOT_MIN; }
+  }
+  return null;
+}
+// quando arriva chi ha un appuntamento: qualcuno prima, i più puntuali, qualcuno in ritardo
+const apptArrival = (t, r) => { const q = r(); return Math.max(OPEN, t + (q < 0.3 ? -3 - r() * 12 : q < 0.8 ? -3 + r() * 7 : 5 + r() * 15)); };
+function apptExtra(t, r, walkin, base = {}) {
+  const id = game.agenda.length;
+  game.agenda.push({ id, t, walkin, status: 'atteso', delay: null });
+  const x = r(); 
+  return { ...base, appt: t, apptId: id, walkin, repair: base.repair !== undefined ? base.repair : x < 0.45 ? 0 : x < 0.8 ? 1 : 2,
+    look: base.look || { skin: pick(SKIN), hair: pick(HAIR), shirt: pick(SHIRTS), pants: pick(PANTS) }, exp: base.exp || rand(64, 76) };
+}
+// prima dell'apertura: tanti appuntamenti quanti, più o meno, i clienti che arriveranno senza
+function buildAgenda(seed) {
+  if (game.observationConfig) { observation.agenda(); return; }
+  const r = mulberry(seed);
+  game.slots = []; game.agenda = [];
+  const walkins = game.arrivals.filter(a => a.kind === 'genius').length;
+  const capacity = agendaCap() * (slotOf(LAST_APPT) + 1) / APPT_SLOTS;
+  const n = Math.round(Math.min(walkins, capacity * 0.55));
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const t = bookSlot(OPEN + r() * (LAST_APPT - OPEN));
+    if (t === null) continue;
+    const extra = apptExtra(t, r, false);
+    if (r() < 0.1) continue;                                   // non si presenta: il posto in agenda resta occupato
+    list.push({ t: apptArrival(t, r), kind: 'genius', extra });
+  }
+  game.arrivals = game.arrivals.concat(list).sort((a, b) => a.t - b.t);
+  game.agenda.sort((a, b) => a.t - b.t);
+}
+const agendaOf = c => c.apptId !== undefined ? game.agenda.find(a => a.id === c.apptId) : null;
+
+function checkIn(point, c) {
+  if (c.appt === undefined) {
+    // senza appuntamento: il primo orario libero, almeno tra 20 minuti, e il cliente torna a quell'ora
+    const t = bookSlot(game.time + 20);
+    point.state = 'idle'; point.customer = null;
+    if (t === null) { game.stats.walkinLater++; log(`${point.name}: agenda piena, il cliente tornerà un altro giorno`); leave(c, 'later'); return; }
+    const r = Math.random, extra = apptExtra(t, r, true, { repair: c.repair, look: c.look, exp: c.exp + 2, rude: c.rude, ...(game.observationLedger ? {journeyId: c.journeyId, labChannel: c.labChannel, familiarity: c.familiarity, hurry: c.hurry, mood: c.mood} : {}) });
+    if (r() >= 0.05) game.arrivals.push({ t: Math.max(game.time + 5, apptArrival(t, r)), kind: 'genius', extra });   // qualcuno non torna
+    game.arrivals.sort((a, b) => a.t - b.t);
+    game.agenda.sort((a, b) => a.t - b.t);
+    game.stats.walkinBooked++;
+    say(point, 'hi', 1); say(c, 'check', 1.5);
+    log(`${point.name} dà al cliente un appuntamento alle ${fmt(t)}`);
+    leave(c, 'rebooked');
+    return;
+  }
+  // con appuntamento: si aspetta nell'area del Genius Bar finché non tocca a lui
+  point.state = 'idle'; point.customer = null; say(point, 'hi', 1);
+  c.tCheck = game.time;
+  const a = agendaOf(c); if (a) a.status = 'in attesa';
+  const q = QUEUE.find(s => !s.taken);
+  const spot = q || { x: Math.random() < 0.5 ? rand(330, 410) : rand(1010, 1090), y: rand(1150, 1420), taken: null };
+  spot.taken = c; c.slot = spot; c.state = 'toQueue'; goTo(c, spot);
+}
+
+// In Carriera, motivazione sociale: supporto e riconoscimento da parte di un Lead presente sul floor.
+function careerLeadSupport(s, c, kind) {
+  if (!s || !s.isPlayer || !c || !playerMode || !playerMode.owns(s) || playerMode.view().isOver) return false;
+  const flag = kind === 'error' ? 'playerEncouraged' : 'playerRecognized';
+  if (c[flag]) return false;
+  const lead = game.staff.find(x => !x.isPlayer && x.role === 'lead' && !x.hidden && !x.gone && !onBreak(x) && isAvailable(x));
+  if (!lead) return false;
+  c[flag] = true;
+  const gain = kind === 'error' ? 2 : 1;
+  bump(s, 'mot', gain); say(lead, 'heart', 3);
+  log(kind === 'error'
+    ? `${lead.name} ti incoraggia: «L'errore si recupera insieme. Finisci la visita, poi prenditi una pausa.» Motivazione +${gain}.`
+    : `${lead.name} riconosce il tuo impegno con il cliente #${c.id}: motivazione +${gain}.`);
+  return true;
+}
+
+// Un momento di servizio: lo stress di chi serve pesa sull'esperienza, la competenza sugli errori
+const ERROR_TEXT = {
+  point: 'manda il cliente nel posto sbagliato', express: 'sbaglia lo scontrino', accessori: 'consiglia l\'accessorio sbagliato',
+  specialist: 'dà un\'informazione sbagliata', genius: 'deve rifare la riparazione', creative: 'dà un\'informazione sbagliata',
+};
+function serve(s, c, weight = 1, errMul = 1) {
+  c.servedBy = s;
+  const k = care(s) * weight;
+  c.exp += k;
+  if (k < 0) c.rushed = true;
+  if (!s.isPlayer) bump(s, 'comp', 0.08 * (1 - s.stats.comp / 120));
+  // un cliente scortese pesa su chi lo serve
+  if (c.rude) {
+    bump(s, 'stress', 4 * TIER[s.tier].stress);
+    if (!s.isPlayer) bump(s, 'mot', -1);
+    c.exp -= 3;
+    say(c, 'angry', 2);
+    if (!c.rudeCounted) { c.rudeCounted = true; game.stats.rude++; log(`Un cliente scortese con ${s.name}`); }
+  }
+  if (Math.random() < errorChance(s, c) * weight * errMul) {
+    c.exp -= 22; c.error = true;
+    say(s, 'oops', 2);
+    if (!s.isPlayer) bump(s, 'mot', -3);
+    bump(s, 'stress', s.isPlayer ? window.PLCareerProgression.errorStress(s.stats) : 3);
+    if (s.isPlayer && playerMode) {
+      playerMode.recordError();
+      careerLeadSupport(s, c, 'error');
+    }
+    game.stats.errors++;
+    if (TIER[s.tier].area === 'bar') game.stats.errBar++;
+    if (s.role === 'genius') game.stats.errRepair++;
+    log(`${s.name} ${ERROR_TEXT[s.role]}`);
+    if (leaderReady('error') && Math.random() < 0.3) errorMoment(s, c);
+    return true;
+  }
+  return false;
+}
+
+// Il commento: non tutti lo lasciano. 5 positivo (+1), 4 passivo (0), da 3 a 1 negativo (−1)
+// Come nella realtà, il feedback arriva solo da chi compra (e al Genius Bar da chi conclude una
+// riparazione). Chi se ne va senza essere seguito finisce tra i persi.
+function survey(c) {
+  if (c.outcome === 'lost') c.exp = Math.min(c.exp, 30);
+  if (!['bought', 'fixed'].includes(c.outcome)) return;
+  if (Math.random() > 0.3) return;
+  const e = c.exp;
+  const score = e >= 72 ? 5 : e >= 58 ? 4 : e >= 45 ? 3 : e >= 32 ? 2 : 1;
+  const value = score === 5 ? 1 : score === 4 ? 0 : -1;
+  const n = c.servedBy ? c.servedBy.name : null;
+  let text;
+  if (score >= 4 && c.error && c.recovered) text = 'Hanno sbagliato, ma hanno rimediato subito';
+  else if (score === 5 && c.needKnown && n) text = pick([`${n} ha capito subito cosa mi serviva`, `${n} mi ha fatto provare proprio quello che cercavo`]);
+  else if (score === 5) text = n ? pick([`Esperienza top, grazie a ${n}`, `${n} mi ha fatto provare tutto con calma`, `Seguito subito, grazie ${n}`])
+    : 'Bel negozio, trovato tutto';
+  else if (score === 4 && c.dWait > 6) text = 'Bene, ma il prodotto ci ha messo un po\' ad arrivare';
+  else if (score === 4) text = pick(['Tutto ok, niente di speciale', 'Bene, ma un po\' di attesa', 'Ho trovato quello che cercavo']);
+  else if (c.outcome === 'lost') text = 'Ho aspettato e nessuno mi ha seguito';
+  else if (c.error && c.recovered) text = 'Hanno sbagliato, ma hanno rimediato subito';
+  else if (c.error) text = `${n} ha sbagliato qualcosa con me`;
+  else if (c.dWait > 8) text = 'Ho pagato e poi ho aspettato tanto il prodotto';
+  else if (c.waited > 8) text = 'Troppa attesa';
+  else if (c.rushed) text = `${n} andava di fretta`;
+  else if (c.need && !c.needKnown) text = 'Mi hanno mostrato il prodotto, ma nessuno mi ha chiesto cosa mi serviva';
+  else text = 'Mi aspettavo di più';
+  game.reviews.unshift({ t: game.time, score, value, text, staff: n, area: c.kind === 'genius' ? 'bar' : 'vendita' });
+  say(c, 'r' + score, 3);
+  if (c.servedBy) {
+    if (score === 5 && !c.servedBy.isPlayer) bump(c.servedBy, 'mot', 3);
+    if (score <= 3) {
+      if (!c.servedBy.isPlayer) bump(c.servedBy, 'mot', -2);
+      bump(c.servedBy, 'stress', 1);
+    }
+  }
+}
+const nps = area => {
+  const list = area ? game.reviews.filter(r => r.area === area) : game.reviews;
+  return list.length ? list.reduce((a, r) => a + r.value, 0) / list.length : null;
+};
+const fmtNps = v => v === null ? '–' : String(Math.round(v * 100));
+
+function releaseSlot(c) {
+  if (c.slot) { c.slot.taken = null; c.slot = null; }
+  if (c.bar) { c.bar.taken = null; c.bar = null; }
+}
+
+function leave(c, outcome) {
+  releaseSlot(c);
+  c.expressAwaiting = false;
+  if (outcome !== 'bought') {
+    for (const order of game.orders.filter(o => o.c === c && !o.done)) order.done = true;
+    c.pending = 0;
+  }
+  for (const line of [game.lineIn, game.lineGB, game.lineEx]) { const i = line.indexOf(c); if (i >= 0) { line.splice(i, 1); line.forEach(x => x.lineIdx = -1); } }
+  if (c.point && c.point.customer === c) { c.point.customer = null; c.point.state = 'idle'; }
+  c.outcome = outcome;
+  c.playerReserved = false;
+  if (playerMode) playerMode.recordLeave(c, outcome);
+  const s = game.stats;
+  { const a = agendaOf(c); if (a) a.status = outcome === 'fixed' ? 'fatto' : 'non servito'; }
+  if (c.kind === 'buy') { s.buyDone++; if (outcome === 'bought') s.buyWon++; }
+  if (outcome === 'lost') { s.lost++; if (c.fromLine) s.lostLine++; say(c, 'cross', 3); log(c.fromLine ? `Un ${describe(c)} se ne va: troppa fila al Point` : `Un ${describe(c)} se ne va: nessuno l'ha seguito`); }
+  else if (outcome === 'browsed') { s.browsed++; if (!c.bubble) say(c, 'meh', 2); }
+  else if (outcome === 'looked') { s.looked++; }
+  else if (outcome === 'later') say(c, 'meh', 2);
+  else if (outcome === 'rebooked') say(c, 'check', 2);
+  else say(c, 'heart', 3);
+  c.exp += { bought: 10, fixed: 12, session: 5, helped: 8 }[outcome] || 0;
+  if (c.servedBy && !c.servedBy.isPlayer && (outcome === 'bought' || outcome === 'fixed')) bump(c.servedBy, 'mot', 1);
+  if (playerMode && c.ownerId === 'PLAYER' && ['bought', 'helped', 'browsed'].includes(outcome)) {
+    careerLeadSupport(playerMode.player(), c, 'visit');
+  }
+  survey(c);
+  if (game.observationLedger) window.PLObservation.recordLeave(game.observationLedger, c, outcome, game.time);
+  if (c.staff) { if (c.staff.customer === c) c.staff.customer = null; c.staff = null; }
+  c.state = 'leaving';
+  goTo(c, { x: DOOR.x + rand(-30, 30), y: DOOR.y - 20 });
+}
+
+const WAIT_COST = { waitDelivery: 0.6, inLine: 0.6, waiting: 0.5, waitWall: 1.5, queued: 0.35, atBar: 0.6 };
+function updateCustomer(c, dt) {
+  const wasLeaving = c.state === 'leaving';
+  if (c.lastProfileExp !== undefined) c.mood = clamp(c.mood + (c.exp - c.lastProfileExp) * 0.6);
+  c.lastProfileExp = c.exp;
+  const arrived = moveAlong(c, dt);
+  const cost = WAIT_COST[c.state];
+  if (game.observationLedger) {
+    const keyroleWait = c.staff && (c.staff.expertHelp || c.staff.helpRequester);
+    const waiting = cost && !(c.state === 'atBar' && c.staff && c.staff.state === 'repair');
+    if (keyroleWait || waiting) window.PLObservation.recordWait(game.observationLedger, c,
+      keyroleWait ? 'keyrole' : game.lineEx.includes(c) ? 'lineEx' : game.lineGB.includes(c) ? 'lineGB' : c.state, dt);
+  }
+  if (cost && !(c.state === 'atBar' && c.staff && c.staff.state === 'repair')) { c.exp -= cost * dt * patienceRate(c); c.waited += dt; }
+  if (c.staff && (c.staff.expertHelp || c.staff.helpRequester)) {
+    c.exp -= 0.35 * dt * patienceRate(c); c.waited += dt;
+    c.supportWait = (c.supportWait || 0) + dt;
+  }
+  if (c.state === 'waitDelivery') c.dWait = (c.dWait || 0) + dt;
+  if (c.state === 'inLine' && game.lineIn.includes(c)) {
+    if (c.linePatience === undefined) c.linePatience = rand(10, 18) * (rainy() ? 0.8 : 1);
+    c.linePatience -= dt * patienceRate(c);
+    if (c.linePatience <= 0 && game.time < CLOSE) { c.fromLine = true; leave(c, 'lost'); return; }
+  }
+  switch (c.state) {
+    case 'toPoint':
+      if (arrived) {
+        const p = c.point;
+        c.state = 'talking'; c.t = (p.post === EXPRESS ? rand(0.5, 1) : p.post === POINT_GB ? (c.appt !== undefined ? rand(0.3, 0.6) : rand(0.8, 1.3)) : rand(0.3, 0.6)) * pace(p);
+        face(c, p); face(p, c);
+        say(p, 'question', c.t / 2); say(c, needIcon(c), c.t);
+      }
+      break;
+    case 'talking':
+      c.t -= dt;
+      if (c.t <= 0) {
+        const p = c.point; c.point = null;
+        if (p.post !== EXPRESS) p.served++;
+        serve(p, c, 0.5);
+        if (p.post === POINT_GB) { say(p, 'check', 1); checkIn(p, c); }
+        else if (p.post === EXPRESS) {
+          say(p, 'check', 1); p.state = 'idle'; p.customer = null; p.served++;
+          c.staff = null;
+          if (c.expressNeedsRunner === undefined) c.expressNeedsRunner = Math.random() <
+            (game.observationConfig ? game.observationConfig.expressRunnerRate : EXPRESS_RUNNER_RATE);
+          if (c.expressNeedsRunner) {
+            const spot = EXPRESS_WAIT.find(s => !s.taken) || {x: 1260, y: rand(1120, 1670), taken: null};
+            spot.taken = c; c.slot = spot; c.expressAwaiting = true; c.state = 'waitDelivery';
+            game.stats.expressRunnerRequested++;
+            requestItem(c, 'acc'); say(c, 'wait', 999); goTo(c, spot);
+            log(`${p.name} richiede un accessorio al runner: cliente #${c.id} in attesa, Express libero per il prossimo`);
+          } else completeExpress(c);
+        } else {
+          say(p, 'hi', 1); p.state = 'idle'; p.customer = null;
+          log(`${p.name} accoglie un ${describe(c)}${c.kind === 'buy' ? '' : c.kind === 'genius' ? ' e lo manda al Point del Genius Bar' : c.kind === 'acc' ? ' e lo manda alle pareti' : ''}`);
+          proceed(c);
+        }
+      }
+      break;
+    case 'toTable':
+      if (arrived) { c.state = 'waiting'; c.tQueue = game.time; c.patience = c.tradeOnly ? rand(20, 30) : (Math.random() < 0.7 ? rand(12, 20) : rand(4, 12)) * (rainy() ? 0.85 : 1); c.wait = 0; c.facing = c.slot.standing ? (c.slot.y < c.slot.table.y ? 'down' : 'up') : c.slot.x < c.slot.table.x ? 'right' : 'left'; say(c, 'question', 2); }
+      break;
+    case 'waiting':
+      c.wait += dt; c.patience -= dt * patienceRate(c);
+      if (c.patience <= 0 && c.tradeOnly) { c.exp -= 15; log('Un cliente rinuncia al Trade In: nessuno è arrivato'); leave(c, 'bought'); }
+      else if (c.patience <= 0) leave(c, 'lost');
+      else if (!c.bubble && Math.random() < dt * 0.25) say(c, 'question', 1.5);
+      break;
+    case 'toQueue':
+      if (arrived) { c.state = 'queued'; c.wait = 0; say(c, 'wrench', 2); }
+      break;
+    case 'queued':
+      c.wait += dt;
+      if (c.wait > 60) { log('Un cliente per assistenza se ne va dopo un\'ora di attesa'); leave(c, 'lost'); }
+      break;
+    case 'toBar':
+      if (arrived) { c.state = 'atBar'; c.facing = 'right'; }
+      break;
+    case 'toWall':
+      if (arrived) {
+        c.facing = c.side === 'L' ? 'left' : 'right';
+        if (c.quick) { c.state = 'pickWall'; c.t = rand(1, 3); }
+        else { c.state = 'waitWall'; c.patience = rand(6, 10) * (rainy() ? 0.8 : 1); c.wait = 0; say(c, 'question', 2); }
+      }
+      break;
+    case 'pickWall':
+      c.t -= dt;
+      if (c.t <= 0) { say(c, 'bag', 2); c.state = 'inLine'; c.lineIdx = -1; game.lineEx.push(c); }
+      break;
+    case 'waitWall':
+      c.wait += dt; c.patience -= dt * patienceRate(c);
+      if (c.patience <= 0) leave(c, 'lost');
+      else if (!c.bubble && Math.random() < dt * 0.25) say(c, 'question', 1.5);
+      break;
+    case 'toLook':
+      if (arrived) { c.state = 'looking'; c.t = rand(2, 6); face(c, { x: c.x < 700 ? c.x + 1 : c.x - 1, y: c.y }); }
+      break;
+    case 'looking':
+      c.t -= dt;
+      if (c.t <= 0) { if (--c.visits > 0) lookAround(c); else afterLooking(c); }
+      break;
+    case 'toSession':
+      if (arrived) {
+        c.state = 'seated'; c.facing = 'down'; c.t = rand(10, 30);
+        game.stats.today++; log('Un cliente si ferma al Today at Apple');
+      }
+      break;
+    case 'toSetup':
+      if (arrived) { c.state = 'setup'; c.facing = 'down'; c.t = rand(30, 60) * profileTime(c); say(c, 'cloud', 999); }
+      break;
+    case 'setup':
+      c.t -= dt;
+      if (c.t <= 0) {
+        c.setupDone = true; c.bubble = null; game.stats.setups++;
+        if (c.setup === 'transferThenTrade') backForTrade(c);
+        else { say(c, 'heart', 1.5); leave(c, 'bought'); }
+      }
+      break;
+    case 'waitTrade':
+      if (SLOTS.some(x => !x.taken && (x.table.product === 'iphone' || x.table.product === 'help'))) backForTrade(c);
+      break;
+    case 'seated':
+      c.t -= dt;
+      if (c.t <= 0 && !game.sessions.some(z => z.state === 'live')) leave(c, 'session');
+      break;
+  }
+  // An arrival at the counter or table cannot finish a newly assigned exit path.
+  if (wasLeaving && c.state === 'leaving' && arrived) c.gone = true;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Team
+// ─────────────────────────────────────────────────────────────
+const canSell = s => s.role === 'specialist' && !s.isPlayer;
+function sessionSoon(mins) {
+  return game.sessions.some(x => x.state !== 'done' && x.start - game.time < mins && game.time < x.end);
+}
+
+function wander(s) {
+  // il Lead gira per tutto il floor e ogni tanto si ferma a osservare
+  if (s.role === 'lead') { goTo(s, { x: rand(150, 1250), y: rand(120, 1700) }); return; }
+  if (s.role === 'accessori') { goTo(s, { x: s.side === 'L' ? 165 : 1255, y: s.side === 'L' ? rand(200, 1600) : rand(420, 1600) }); return; }
+  const zoneTables = s.zone ? TABLES.filter(t => t.product === s.zone || (s.zone === 'ipad' && t.product === 'watch')) : null;
+  if (s.role === 'specialist' && zoneTables) {
+    const t = pick(zoneTables);
+    goTo(s, { x: t.x + (Math.random() < 0.5 ? -40 : t.w + 40), y: t.y === ROWS[0] ? t.y + t.h + 40 : t.y - 40 });
+  } else goTo(s, { x: s.home.x + rand(-40, 40), y: s.home.y + rand(-20, 20) });
+}
+
+function dispatch() {
+  if (playerMode) playerMode.reserveNext();
+  // vendita: chi aspetta da più tempo viene servito per primo, dal più vicino libero
+  const waiting = game.customers.filter(c => c.state === 'waiting' && !c.staff && !c.playerReserved && c.ownerId !== 'PLAYER').sort((a, b) => a.tQueue - b.tQueue);   // in ordine di arrivo al tavolo
+  for (const c of waiting) {
+    const free = game.staff.filter(s => canSell(s) && s.state === 'idle' || canSell(s) && s.state === 'wander');
+    if (!free.length) break;
+    free.sort((a, b) => dist(a, c) - dist(b, c));
+    const s = free[0];
+    s.customer = c; c.staff = s; s.state = 'toCustomer';
+    goTo(s, { x: c.slot.sx, y: c.slot.sy });
+    game.stats.waitSum += c.wait; game.stats.waitN++;
+  }
+  // Pareti accessori: prima lo Specialist di quel lato, se è occupato quello dell'altro
+  const atWall = game.customers.filter(c => c.state === 'waitWall' && !c.staff && !c.playerReserved && c.ownerId !== 'PLAYER').sort((a, b) => b.wait - a.wait);
+  for (const c of atWall) {
+    // i Creative liberi danno una mano agli accessori
+    const noAcc = !game.staff.some(s => s.role === 'accessori');
+    const free = game.staff.filter(s => !s.isPlayer && (s.role === 'accessori' || (s.role === 'creative' && !presentsSoon(s)) || (noAcc && s.role === 'specialist')) && (s.state === 'idle' || s.state === 'wander'));
+    if (!free.length) break;
+    const s = free.find(x => x.role === 'accessori' && x.side === c.side) || free.find(x => x.role === 'accessori') || free.sort((a, b) => dist(a, c) - dist(b, c))[0];
+    s.customer = c; c.staff = s; s.state = 'toWallCustomer';
+    goTo(s, { x: c.x + (c.side === 'L' ? 28 : -28), y: c.y + 30 });
+  }
+  dispatchOps();
+  // Genius Bar: chi aspetta tra gli alberi prende il primo posto libero
+  const queued = game.customers.filter(c => c.state === 'queued').sort((a, b) => (a.appt ?? 1e9) - (b.appt ?? 1e9) || b.wait - a.wait);   // in ordine di appuntamento
+  for (const c of queued) {
+    const bar = BAR.find(b => !b.taken);
+    if (!bar) break;
+    releaseSlot(c);
+    bar.taken = c; c.bar = bar; c.state = 'toBar'; goTo(c, bar);
+  }
+  // ...e al posto arriva il Genius libero più vicino
+  const seated = game.customers.filter(c => (c.state === 'atBar' || c.state === 'toBar') && !c.staff);
+  for (const c of seated) {
+    const free = game.staff.filter(s => s.role === 'genius' && (s.state === 'idle' || s.state === 'wander'));
+    if (!free.length) break;
+    // la riparazione va a chi ha il livello giusto: né sotto (più lento, più errori) né sprecando un Genius
+    const fit = s => { const k = TIER[s.tier].skill; return (s.calmUntil > game.time && c.repair > 0 ? 20 : 0) + (k < c.repair ? 10 + c.repair - k : k - c.repair); };
+    free.sort((a, b) => fit(a) - fit(b) || dist(a, c.bar) - dist(b, c.bar));
+    const g = free[0];
+    c.staff = g; g.customer = c;
+    g.state = 'toBar'; goTo(g, { x: c.bar.gx, y: c.bar.gy });
+  }
+}
+
+// ── Consegne dal backstage. Quando un cliente compra, il prodotto arriva dal magazzino: lo porta il team
+// Operations. Se l'ordine non è ancora partito, un accessorio chiesto dopo viaggia insieme al prodotto;
+// se è già partito serve un secondo giro, e il cliente aspetta di nuovo.
+const opsOn = () => game.staff.filter(x => x.role === 'ops');
+function completeExpress(c) {
+  if (c.gone || c.outcome || c.expressCompleted) return false;
+  c.expressCompleted = true; c.bought = true;
+  game.stats.express++;
+  if (c.expressAwaiting) game.stats.expressRunnerDelivered++;
+  log(`${c.servedBy ? c.servedBy.name : 'Express'} conclude l'acquisto all'Express (B1)${c.expressAwaiting ? ' dopo la consegna del runner' : ''}`);
+  say(c, 'check', 1); leave(c, 'bought'); return true;
+}
+function requestItem(c, what) {
+  c.pending = (c.pending || 0) + 1;
+  const open = game.orders.find(o => o.c === c && !o.ops && !o.done);
+  if (open) { open.items.push(what); return; }
+  game.orders.push({ c, items: [what], t0: game.time, ops: null, done: false });
+  game.stats.orders++;
+}
+const handTo = c => c.staff && c.staff.customer === c ? c.staff : c;
+// la prossima consegna del giro: lo Specialist (o il cliente) più vicino a dove si trova adesso
+function nextDelivery(s) {
+  s.batch = (s.batch || []).filter(o => !o.done && !o.c.gone && !o.c.outcome);
+  if (!s.batch.length) { s.order = null; s.bubble = null; return false; }
+  s.batch.sort((a, b) => dist(s, handTo(a.c)) - dist(s, handTo(b.c)));
+  s.order = s.batch.shift();
+  s.state = 'delivering'; say(s, 'bag', 99);
+  goTo(s, handSpot(handTo(s.order.c)));
+  return true;
+}
+const handSpot = e => ({ x: e.x + (e.x > 700 ? -26 : 26), y: e.y + 22 });
+function delivered(o) {
+  if (o.done) return;
+  const c = o.c;
+  o.done = true;
+  if (c.gone || c.outcome) return;
+  game.stats.delivered++; game.stats.deliverySum += game.time - o.t0;
+  const k = !o.items.includes('product') ? 'acc' : o.c.product === 'iphone' ? 'iphone' : 'altri';
+  const d = game.stats.byKind[k] = game.stats.byKind[k] || { n: 0, sum: 0, max: 0 };
+  d.n++; d.sum += game.time - o.t0; d.max = Math.max(d.max, game.time - o.t0);
+  c.pending = Math.max(0, c.pending - o.items.length);
+  if (c.pending > 0 || c.state !== 'waitDelivery') return;
+  if (c.expressAwaiting) { completeExpress(c); return; }
+  const sp = handTo(c);
+  // lo Specialist che aspettava col cliente gli consegna il prodotto
+  if (sp !== c) { sp.state = 'handover'; sp.t = 0.6; face(sp, c); say(sp, 'bag', 0.6); }
+  else afterPurchase(c);
+}
+function dispatchOps() {
+  game.orders = game.orders.filter(o => !o.done);
+  const queued = game.orders.filter(o => !o.ops);
+  if (!queued.length) return;
+  // se oggi in Operations non c'è più nessuno, il prodotto lo prende chi vende
+  if (!opsOn().length) {
+    if (!game.observationConfig) queued.filter(o => !o.c.expressAwaiting).forEach(delivered);
+    return; // In the laboratory a missing Operations team leaves a real backlog.
+  }
+  for (const o of queued) {
+    if (o.ops) continue;                                     // già preso in un giro con altri ordini
+    // chi è ancora in backstage per un ordine dello stesso minuto prende anche questo
+    const joiner = opsOn().find(x => (x.state === 'toBack' || x.state === 'picking') && x.batch && x.batch.length < 3 && Math.abs(o.t0 - x.batch[0].t0) <= 1);
+    if (joiner) {
+      o.ops = joiner; joiner.batch.push(o); game.stats.batched++;
+      if (joiner.state === 'picking') joiner.t += 0.3 * pace(joiner);
+      log(`${joiner.name} prende anche l'ordine per ${handTo(o.c).name || 'un cliente'}: un solo giro`);
+      continue;
+    }
+    const free = opsOn().filter(x => (x.state === 'idle' || x.state === 'wander' || x.state === 'returning') && !onBreak(x) && !x.wantsBreak);
+    if (!free.length) break;
+    // prima chi è già in backstage, poi chi sta tornando
+    free.sort((a, b) => b.hidden - a.hidden || dist(a, BACK_DOOR) - dist(b, BACK_DOOR));
+    const x = free[0];
+    // gli ordini arrivati nello stesso minuto viaggiano insieme: un giro solo, fino a 3 clienti
+    const batch = [o, ...queued.filter(q => q !== o && !q.ops && Math.abs(q.t0 - o.t0) <= 1)].slice(0, 3);
+    batch.forEach(q => { q.ops = x; });
+    if (batch.length > 1) { game.stats.batched += batch.length - 1; log(`${x.name} prende ${batch.length} ordini in un solo giro`); }
+    x.batch = batch; x.order = batch[0]; x.state = 'toBack';
+    if (x.hidden) x.path = []; else goTo(x, BACK_DOOR);
+  }
+}
+
+const REPAIR_TIME = [[10, 20], [18, 32], [30, 45]];      // un appuntamento al Genius Bar dura da 10 a 45 minuti
+const REPAIR_NAME = ['rapida', 'media', 'complessa'];
+const BUSY = new Set(['waitHelp', 'toHelp', 'assist', 'toAccWall', 'atAccWall', 'backToTable', 'tradeOnly', 'toBack', 'picking', 'delivering', 'handing', 'probe', 'demo', 'checkout', 'repair', 'advise', 'listening', 'escort', 'presenting', 'toCustomer', 'toWallCustomer', 'toBar']);
+// Point ed Express stressano più della vendita e degli accessori
+const ROLE_STRESS = { point: 1.3, express: 1.3, specialist: 1, accessori: 0.9, genius: 0.8, creative: 0.8, ops: 1 };
+BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen');
+const SUPPORT_PHASES = new Set(['probe', 'listen', 'helping', 'advise', 'repair']);
+function requestExpert(s, c) {
+  if (!c || c.helpChecked || !['S', 'TS'].includes(s.tier) || !SUPPORT_PHASES.has(s.state)) return;
+  const demanding = c.complex || c.familiarity === 2 || c.hurry === 2 || c.mood < 35 || (s.tier === 'TS' && c.repair > 0);
+  if (!demanding) return;
+  const tiers = s.tier === 'TS' ? ['TE', 'G'] : ['E', 'P'];
+  const experts = game.staff.filter(e => !e.isPlayer && e !== s && tiers.includes(e.tier) && !e.hidden && !e.gone && !onBreak(e) &&
+    !e.helpRequester && !e.expertHelp && ['idle', 'wander', 'probe', 'demo', 'checkout', 'helping', 'advise', 'repair', 'waitProduct'].includes(e.state));
+  const expert = experts.sort((a, b) => Number(Boolean(a.customer)) - Number(Boolean(b.customer)) || dist(s, a) - dist(s, b))[0];
+  if (!expert) return; // Riprova quando una persona esperta può essere raggiunta.
+  c.helpChecked = true;
+  if (Math.random() >= 0.8) return;
+  s.expertHelp = { expert, customer: c, resume: s.state, remaining: s.t, x: s.x, y: s.y, path: s.path.slice(), phase: 'out', time: rand(2, 4) };
+  expert.helpRequester = s;
+  s.state = 'toExpert'; goTo(s, { x: expert.x + 30, y: expert.y + 20 });
+  c.expertName = expert.name; c.supportRequests = (c.supportRequests || 0) + 1;
+  game.stats.helpAsked++;
+  say(c, 'wait', 3); say(s, 'question', 3);
+  log(`${s.name} chiede una mano a ${expert.name}${expert.customer ? ': la sua consulenza si interrompe' : ''} per il cliente #${c.id}`);
+}
+function updateExpertHelp(s, dt) {
+  const h = s.expertHelp;
+  if (!h) return false;
+  if (h.customer.outcome || s.customer !== h.customer || h.expert.gone || onBreak(h.expert)) {
+    if (h.expert.helpRequester === s) delete h.expert.helpRequester;
+    delete s.expertHelp; s.state = s.customer ? h.resume : 'idle'; s.t = h.remaining;
+    goTo(s, { x: h.x, y: h.y }); return true;
+  }
+  const arrived = moveAlong(s, dt);
+  bump(s, 'stress', 0.1 * dt);
+  if (h.phase === 'out' && arrived) {
+    h.phase = 'talk'; s.state = 'expertAdvice'; face(s, h.expert); say(h.expert, 'question', h.time);
+  } else if (h.phase === 'talk') {
+    h.time -= dt;
+    if (h.time <= 0) {
+      delete h.expert.helpRequester;
+      bump(s, 'comp', 0.3); bump(h.expert, 'stress', 0.8);
+      if (s.isPlayer) {
+        bump(s, 'mot', 3); say(s, 'heart', 2);
+        log(`${h.expert.name} ti sostiene nel confronto: motivazione +3.`);
+      }
+      h.customer.exp += 3; h.customer.expertHelped = true;
+      game.stats.helpGiven++;
+      h.phase = 'back'; s.state = 'fromExpert'; goTo(s, { x: h.x, y: h.y });
+    }
+  } else if (h.phase === 'back' && arrived) {
+    s.state = h.resume; s.t = h.remaining; s.path = h.path;
+    face(s, h.customer); delete s.expertHelp;
+    log(`${s.name} torna dal cliente #${h.customer.id} dopo il confronto con ${h.expert.name}`);
+  }
+  return true;
+}
+function updateStaff(s, dt) {
+  if (s.helpRequester) {
+    // Il cliente dell'Expert resta assegnato; percorso e timer sono sospesi.
+    bump(s, 'stress', 0.08 * dt); return;
+  }
+  if (updateExpertHelp(s, dt)) return;
+  requestExpert(s, s.customer);
+  if (s.expertHelp) return;
+  const arrived = moveAlong(s, dt);
+  const c = s.customer;
+  if (game.time >= OPEN && game.time < CLOSE && !onBreak(s)) {
+    if (BUSY.has(s.state) || s.customer) bump(s, 'stress', 0.08 * ROLE_STRESS[s.role] * TIER[s.tier].stress * T(s).stress * (ddOn('fun', 'squadra') && ddInvolved(s) ? 0.8 : 1) * (1 + 0.1 * F().sales) * (s.calmUntil > game.time ? 0.5 : 1) * (pushed(s) ? 1.4 : 1) * dt);
+    else bump(s, 'stress', (s.post ? -0.03 : -0.05) * dt);
+    if (!s.isPlayer) bump(s, 'mot', -0.015 * (1 - 0.3 * F().cel) * dt);
+    else {
+      const climate = careerTeamClimate();
+      if (climate !== null) bump(s, 'mot', (climate - s.stats.mot) * Math.min(1, Math.max(0, dt) / 240));
+    }
+  }
+  if (s.wantsBreak && isAvailable(s)) startBreak(s);
+  if (s.pendingSlot !== undefined && isAvailable(s)) { Object.assign(s, slotProps('floor', s.pendingSlot)); s.pendingSlot = undefined; s.state = 'idle'; goTo(s, s.home); }
+  if (s.nextSlot !== undefined && isAvailable(s) && canLeavePost(s)) applySlot(s);
+  switch (s.state) {
+    case 'leavingSick':
+      if (arrived) s.gone = true;
+      break;
+    case 'toBreak':
+      if (arrived) { s.state = 'onBreak'; s.hidden = true; s.until = game.time + 15; }
+      break;
+    case 'onBreak':
+      bump(s, 'stress', -1.5 * dt);
+      if (!s.isPlayer) bump(s, 'mot', 0.2 * dt);
+      if (game.time >= s.until) {
+        if (s.isPlayer && playerMode) { bump(s, 'stress', -35); playerMode.completeBreak(); }
+        s.hidden = false; s.x = DOOR.x; s.y = DOOR.y; s.state = 'fromBreak'; goTo(s, s.home);
+      }
+      break;
+    case 'fromBreak':
+      if (arrived) { s.state = 'idle'; s.t = rand(1, 3); }
+      break;
+    case 'idle':
+      if (s.post) {
+        if (arrived && dist(s, s.home) > 5) goTo(s, s.home);
+        else if (arrived) s.facing = s.post.face;
+        break;
+      }
+      s.t -= dt;
+      if (s.t <= 0) { s.state = 'wander'; wander(s); }
+      break;
+    case 'escort':
+      if (arrived) { say(s, 'hi', 1); s.customer = null; s.state = 'idle'; goTo(s, s.home); }
+      break;
+    case 'wander':
+      if (arrived) { s.state = 'idle'; s.t = s.role === 'lead' ? rand(1, 3) : rand(3, 9); if (s.role === 'lead' && Math.random() < 0.4) say(s, 'eye', 1.5); }
+      break;
+    case 'toWallCustomer':
+      if (!c || c.state !== 'waitWall') { s.customer = null; s.state = 'idle'; s.t = 1; break; }
+      if (arrived) {
+        s.state = 'advise'; s.t = rand(2, 4) * pace(s) * profileTime(c); c.state = 'servedWall'; serve(s, c);
+        face(s, c); say(s, 'question', s.t / 2); say(c, 'dots', s.t);
+      }
+      break;
+    case 'advise':
+      s.t -= dt;
+      if (s.t < 1 && !(s.bubble && s.bubble.icon === 'bag')) say(s, 'bag', 1);
+      if (s.t <= 0) {
+        if (Math.random() < 0.6 + 0.3 * s.stats.comp / 100 + (ddOn('business', 'accessori') ? 0.08 * ddMult() : 0) + (s.role === 'creative' && ddOn('creative', 'accessori') ? 0.15 * ddMult() : 0)) {
+          s.served++; game.stats.wallSales++;
+          say(s, 'check', 1); say(c, 'check', 1);
+          if (Math.random() < 0.35) {
+            log(`${s.name} vende un accessorio alla parete ${c.side === 'L' ? 'sinistra' : 'destra'}: arriva dal backstage`);
+            requestItem(c, 'acc'); c.state = 'waitDelivery'; say(c, 'wait', 999);
+            s.state = 'waitProduct'; say(s, 'wait', 999);
+            break;
+          }
+          s.customer = null;
+          log(`${s.name} vende un accessorio alla parete ${c.side === 'L' ? 'sinistra' : 'destra'}`);
+          leave(c, 'bought');
+        } else { s.customer = null; leave(c, 'browsed'); }
+        s.state = 'idle'; s.t = rand(1, 3);
+      }
+      break;
+    case 'toCustomer':
+      if (!c || c.state !== 'waiting') { s.customer = null; s.state = 'idle'; s.t = 1; break; }
+      if (arrived) {
+        c.state = 'served'; serve(s, c); face(s, c);
+        if (c.tradeOnly) {
+          s.state = 'tradeOnly'; s.t = rand(6, 12) * pace(s); say(s, 'trade', s.t); say(c, 'iphone', 2);
+          log(`${s.name} fa il Trade In del vecchio telefono`);
+          break;
+        }
+        if (c.kind === 'help') {
+          s.state = 'helping'; s.t = rand(4, 9) * pace(s) * profileTime(c); say(s, 'question', 2); say(c, 'dots', s.t);
+          break;
+        }
+        s.state = 'approach'; s.t = rand(0.5, 1) * pace(s);
+        say(s, 'hi', s.t); say(c, 'hi', s.t);
+        log(`${s.name} segue un ${describe(c)} al tavolo ${c.slot.table.name}`);
+      }
+      break;
+    case 'approach':
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.state = 'probe'; s.t = (c.fast ? rand(0.5, 1.5) : rand(2.5, 4.5)) * pace(s) * profileTime(c);
+        say(s, 'question', s.t); say(c, 'dots', s.t);
+      }
+      break;
+    case 'helping':
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.served++; game.stats.helped++; say(s, 'check', 1);
+        s.customer = null; leave(c, 'helped');
+        s.state = 'idle'; s.t = rand(1, 3);
+      }
+      break;
+    case 'probe':
+      s.t -= dt;
+      if (s.t <= 0) {
+        // più competenza, più spesso le domande fanno emergere il bisogno
+        c.needKnown = Math.random() < 0.35 + 0.55 * s.stats.comp / 100 + T(s).need + (ddOn('product') && ddInvolved(s) ? (game.dd.target === c.product ? 0.35 : 0.05) * ddMult() : 0);
+        if (c.needKnown) c.exp += 4;
+        s.state = 'demo'; s.t = (c.fast ? rand(1, 3) : rand(5, 10)) * pace(s) * profileTime(c); say(s, c.product, s.t); say(c, 'dots', s.t);
+      }
+      break;
+    case 'demo':
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.state = 'listen'; s.t = (c.fast ? rand(0.5, 1) : rand(1, 3)) * pace(s);
+        say(c, 'question', s.t); say(s, 'dots', s.t);
+      }
+      break;
+    case 'listen':
+      s.t -= dt;
+      if (s.t <= 0) {
+        // Più ha aspettato, meno compra
+        // chi si siede con uno Specialist compra quasi sempre: circa uno su dieci ci ripensa
+        const p = 0.85 + 0.06 * s.stats.comp / 100 + (c.needKnown ? 0.04 : 0) + 0.5 * ((TIER[s.tier].sales || 0) + T(s).buy + (ddOn('product', c.product) ? 0.08 * ddMult() : 0)) + (c.fast ? 0.04 : 0) - Math.min(0.08, c.wait * 0.005);
+        if (Math.random() < p) {
+          s.state = 'checkout'; s.t = (c.fast ? rand(1.5, 2.5) : rand(2, 4)) * pace(s); c.bought = true;
+          requestItem(c, 'product');
+          say(s, 'check', s.t); say(c, 'check', s.t);
+        } else {
+          log(`Il cliente di ${s.name} ci pensa ancora`);
+          finishSale(s, c, false);
+        }
+      }
+      break;
+    case 'checkout':
+      s.t -= dt;
+      if (s.t <= 0) {
+        // prima l'accessorio, poi il servizio (AppleCare, permuta, configurazione)
+        // l'accessorio legato al bisogno funziona molto più di uno generico
+        if (tryProposal(c, 'accTried', attachChance(s) + (c.needKnown ? 0.15 : 0))) {
+          c.accName = c.needKnown ? c.need.acc : 'una custodia';
+          // lo Specialist accompagna il cliente alla parete accessori più vicina, scelgono lì e poi tornano al tavolo
+          const side = c.x < 700 ? 'L' : 'R', y = Math.max(side === 'L' ? 200 : 440, Math.min(1600, c.y + rand(-120, 120)));
+          c.state = 'escorted'; goTo(c, { x: WALL_SPOT[side], y });
+          s.state = 'toAccWall'; s.accSide = side; goTo(s, { x: WALL_SPOT[side] + (side === 'L' ? 34 : -34), y: y + 20 });
+          say(s, 'bag', 2); game.stats.escorts++;
+        } else if (tryProposal(c, 'svcTried', attachChance(s) * 0.7 * (ddOn('business', 'applecare') ? 1 + 1.0 * ddMult() : 1))) {
+          s.t = rand(1.5, 3) * pace(s); say(s, 'shield', s.t);
+          c.service = Math.random() < 0.5 + (ddOn('business', 'applecare') ? 0.2 * ddMult() : 0);
+        } else if (c.tradeIn && !c.tradeDone && c.setup !== 'transferThenTrade') {
+          s.state = 'tradeIn'; s.t = rand(6, 12) * pace(s); say(s, 'trade', s.t); say(c, 'iphone', 2);
+          log(`${s.name} valuta il vecchio dispositivo del cliente per il Trade In`);
+        } else if (c.finance && !c.financeDone) {
+          s.state = 'financing'; s.t = rand(8, 15) * pace(s); say(s, 'card', s.t); say(c, 'dots', s.t);
+          log(`${s.name} prepara la pratica di finanziamento`);
+        } else finishSale(s, c, true);
+      }
+      break;
+    case 'tradeIn':
+    case 'financing':
+      s.t -= dt;
+      if (s.t <= 0) {
+        if (s.state === 'tradeIn') c.tradeDone = true; else c.financeDone = true;
+        s.state = 'checkout'; s.t = 0.5;
+      }
+      break;
+    case 'toBar':
+      if (arrived && c && c.state === 'atBar') {
+        const gap = Math.max(0, c.repair - TIER[s.tier].skill);
+        const ag = agendaOf(c);
+        if (ag && ag.delay === null) {
+          ag.status = 'al Genius Bar'; ag.delay = Math.max(0, game.time - Math.max(c.appt, c.tCheck ?? c.appt));
+          game.stats.apptStarted++; game.stats.apptDelay += ag.delay; if (ag.delay > 10) game.stats.apptLate++;
+        }
+        s.state = 'repair'; s.t = rand(...REPAIR_TIME[c.repair]) * (1 + 0.25 * gap) * pace(s) * (c.repair === 2 && ddOn('support', 'complesse') && ddInvolved(s) ? 0.9 : 1); s.facing = 'left';
+        if (serve(s, c, 1, 1 + gap)) s.t += 8;
+        say(s, 'wrench', 3); say(c, 'dots', 3);
+        log(`${s.name} (${TIER[s.tier].label}) prende una riparazione ${REPAIR_NAME[c.repair]} al tavolo ${c.bar.table.name}`);
+      }
+      break;
+    case 'repair':
+      if (!c) { s.state = 'idle'; s.t = 1; break; }
+      s.t -= dt;
+      if (Math.random() < dt * 0.15) say(s, pick(['wrench', 'dots', 'question']), 1.5);
+      if (s.t <= 0) {
+        game.stats.genius++; s.served++;
+        if (Math.random() < attachChance(s) * 0.3 * (ddOn('business', 'applecare') ? 1 + 1.2 * ddMult() : 1)) { game.stats.services++; log(`${s.name} aggiunge AppleCare`); }
+        log(`${s.name} risolve al Genius Bar`);
+        leave(c, 'fixed');
+        s.state = 'idle'; s.t = rand(1, 3); goTo(s, s.home);
+      }
+      break;
+    case 'toBack':
+      if (arrived) {
+        // in magazzino l'iPhone è a portata di mano; iPad, Watch e Mac richiedono di più; ogni pezzo in più aggiunge poco
+        const pick1 = o => rand(...(o.items.includes('product') ? (PICK_TIME[o.c.product] || PICK_TIME.acc) : PICK_TIME.acc));
+        const items = s.batch.reduce((a, o) => a + o.items.length, 0);
+        s.hidden = true; s.state = 'picking'; s.t = (Math.max(...s.batch.map(pick1)) + 0.4 * (items - 1)) * pace(s) * (game.observationConfig ? game.observationConfig.delivery : 1);
+      }
+      break;
+    case 'picking':
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.hidden = false; s.x = BACK_DOOR.x; s.y = BACK_DOOR.y;
+        s.batch.filter(o => o.c.gone || o.c.outcome).forEach(o => { o.done = true; });
+        s.batch = s.batch.filter(o => !o.done);
+        if (!nextDelivery(s)) { s.state = 'returning'; goTo(s, s.home); }
+      }
+      break;
+    case 'delivering': {
+      const o = s.order, c = o.c;
+      if (c.gone || c.outcome) { o.done = true; s.order = null; s.bubble = null; if (!nextDelivery(s)) { s.state = 'returning'; goTo(s, s.home); } break; }
+      if (arrived) {
+        const to = handTo(c);
+        if (dist(s, to) > 60) { goTo(s, handSpot(to)); break; }
+        face(s, to); face(to, s); say(s, 'check', 1);
+        log(`${s.name} porta ${o.items.includes('product') ? PRODUCT_NAME[c.product] || 'il prodotto' : 'l\'accessorio'}${o.items.length > 1 ? ' e l\'accessorio' : ''} ${to === c ? 'al cliente' : 'a ' + to.name} dopo ${Math.round(game.time - o.t0)} minuti`);
+        s.served++; s.order = null;
+        delivered(o);
+        s.state = 'handing'; s.t = 0.5;
+      }
+      break;
+    }
+    case 'toAccWall':
+      if (!c || c.gone || c.outcome) { s.customer = null; s.state = 'idle'; s.t = 1; break; }
+      if (arrived && c.path.length === 0) {
+        face(s, c); face(c, { x: s.accSide === 'L' ? 0 : 1440, y: c.y });
+        s.state = 'atAccWall'; s.t = rand(1.5, 3) * pace(s); say(s, 'bag', s.t); say(c, 'dots', s.t);
+        c.accessory = Math.random() < (c.needKnown ? 0.8 : 0.4) + (ddOn('business', 'accessori') ? 0.1 * ddMult() : 0);
+        // a volte l'accessorio è sulla parete, a volte va preso in backstage
+        if (c.accessory) { if (Math.random() < 0.5) game.stats.fromWall++; else requestItem(c, 'acc'); }
+      }
+      break;
+    case 'atAccWall':
+      s.t -= dt;
+      if (s.t <= 0) {
+        if (c.accessory) log(`${s.name} accompagna il cliente alla parete: ${c.accName}`);
+        c.state = 'escorted'; goTo(c, c.slot);
+        s.state = 'backToTable'; goTo(s, { x: c.slot.sx, y: c.slot.sy });
+      }
+      break;
+    case 'backToTable':
+      if (!c || c.gone || c.outcome) { s.customer = null; s.state = 'idle'; s.t = 1; break; }
+      if (arrived && c.path.length === 0) { c.state = 'served'; face(s, c); s.state = 'checkout'; s.t = 0.5 * pace(s); }
+      break;
+    case 'tradeOnly':
+      s.t -= dt;
+      if (s.t <= 0) {
+        if (c && !c.gone && !c.outcome) { game.stats.tradeIns++; game.stats.tradeAfter++; say(c, 'heart', 1.5); s.customer = null; c.staff = null; leave(c, 'bought'); }
+        s.served++; s.customer = null; s.state = 'idle'; s.t = rand(1, 3);
+      }
+      break;
+    case 'waitProduct':
+      if (!c || c.gone || c.outcome) { s.customer = null; s.bubble = null; s.state = 'idle'; s.t = 1; }
+      break;
+    case 'handover':
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.bubble = null; say(s, 'check', 1);
+        if (c && !c.gone && !c.outcome) { say(c, 'heart', 1.5); c.staff = null; s.customer = null; afterPurchase(c); }
+        s.customer = null; s.state = 'idle'; s.t = rand(1, 3);
+      }
+      break;
+    case 'handing':
+      s.t -= dt;
+      if (s.t <= 0 && !nextDelivery(s)) { s.state = 'returning'; goTo(s, s.home); }
+      break;
+    case 'returning':
+      if (arrived) { s.state = 'idle'; s.hidden = true; }
+      break;
+    case 'toStage':
+      if (arrived) { s.state = 'onStage'; s.facing = 'up'; }
+      break;
+    case 'huddle':
+      if (arrived) face(s, { x: 700, y: 1440 });
+      if (game.time >= s.until) { s.state = 'idle'; s.t = rand(0, 2); say(s, 'star', 1); goTo(s, s.home); }
+      break;
+    case 'training':
+      if (game.time >= s.until) {
+        s.seat.taken = null; s.seat = null; bump(s, 'comp', 2);
+        s.state = 'idle'; s.t = rand(0, 2); goTo(s, s.home);
+      }
+      break;
+    case 'presenting':
+      if (Math.random() < dt * 0.3) say(s, pick(['star', 'iphone', 'ipad', 'hi']), 1.5);
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Momenti da leader: quando sul floor succede qualcosa di importante (qualcuno è al limite,
+// una grande vendita, un errore serio) il gioco si ferma e decidi tu come intervenire.
+// ─────────────────────────────────────────────────────────────
+// ogni tipo di momento al massimo una volta al giorno, così le situazioni cambiano
+const leaderReady = type => STRATEGY_ON && !SPECIALIST_ON && !game.moment && game.momentsDone < game.momentsMax && !game.momentTypes.includes(type) &&
+  game.time >= OPEN + 15 && game.time < CLOSE - 15 && game.time - game.lastMoment >= 45;
+function openMoment(m) {
+  game.moment = m; game.lastMoment = game.time;
+  if (m.type !== 'sick') { game.momentsDone++; game.momentTypes.push(m.type); }
+  if (window.autoCoach) { chooseMoment(window.autoCoach(m.choices, m)); closeMoment(); return; }   // per i test
+  renderMoment();
+}
+// Qualcuno si sente male: esce dallo store e il suo posto resta scoperto finché non decidi
+function fallIll(s) {
+  game.stats.sickNow++;
+  TEAM[s.name].sickTomorrow = Math.random() < 0.6;
+  const c = s.customer;
+  // chi stava parlando con lui al Point o all'Express torna in testa alla fila
+  if (c && c.point === s) {
+    c.point = null; c.state = 'inLine'; c.lineIdx = -1;
+    (s.post === POINT_GB ? game.lineGB : s.post === EXPRESS ? game.lineEx : game.lineIn).unshift(c);
+  } else if (c && c.staff === s) {
+    c.staff = null;
+    if (c.state === 'escorted') { goTo(c, c.slot); c.state = 'toTable'; }
+    if (c.state === 'served') { c.state = 'waiting'; c.patience = 10; }
+    if (c.state === 'servedWall') { c.state = 'waitWall'; c.patience = 8; }
+  }
+  s.customer = null;
+  for (const o of [s.order, ...(s.batch || [])]) if (o && !o.done) o.ops = null;
+  s.order = null; s.batch = []; if (s.role === 'ops') s.bubble = null;
+  if (s.hidden && !onBreak(s)) { s.hidden = false; s.x = BACK_DOOR.x; s.y = BACK_DOOR.y; }
+  if (s.seat) { s.seat.taken = null; s.seat = null; }
+  // se doveva tenere una lezione, la prende un altro Creative
+  for (const ses of game.sessions.filter(z => z.presenter === s && z.state !== 'done')) {
+    if (ses.state === 'live') { ses.state = 'done'; log(`«${ses.title}» finisce prima`); }
+    else { ses.presenter = null; ses.state = 'planned'; }
+  }
+  const was = { rota: s.rota, slot: s.slot, name: s.slot !== undefined ? rotaOf(s)[s.slot].name : TIER[s.tier].label, post: s.post };
+  Object.assign(s, { rota: 'out', slot: undefined, nextSlot: undefined, pendingSlot: undefined, post: undefined, role: 'out', wantsBreak: false });
+  s.state = 'leavingSick'; say(s, 'oops', 3); goTo(s, { x: DOOR.x, y: DOOR.y - 20 });
+  game.sick.push(s.name);
+  log(`${s.name} non si sente bene e va a casa`);
+  if (STRATEGY_ON && !SPECIALIST_ON && !game.moment && !window.noSickMoment) sickMoment(s, was);
+  else coverPost(was);
+}
+// il posto scoperto lo prende uno Specialist (o un tecnico, al Bar) dai tavoli
+function coverPost(was) {
+  if (!was.post || was.rota === 'out') return null;
+  const role = was.rota === 'bar' ? 'genius' : 'specialist';
+  const sub = game.staff.filter(y => y.rota === was.rota && y.role === role && !onBreak(y))
+    .sort((a, b) => isAvailable(b) - isAvailable(a) || a.stats.stress - b.stats.stress)[0];
+  if (!sub) return null;
+  if (isAvailable(sub)) { Object.assign(sub, slotProps(was.rota, was.slot)); sub.state = 'idle'; goTo(sub, sub.home); }
+  else if (was.rota === 'floor') { sub.pendingSlot = was.slot; }
+  else sub.nextSlot = was.slot;
+  log(`${sub.name} copre ${was.name}`);
+  return sub;
+}
+function sickMoment(s, was) {
+  const area = TIER[s.tier].area;
+  const lighter = FORMATION_ORDER[FORMATION_ORDER.indexOf(game.formation) + 1];
+  const choices = [{ k: 'copri', t: was.post ? `Copri ${was.name} con un collega dai tavoli` : 'Gli altri si dividono i suoi clienti' }];
+  if (area === 'floor' && lighter) choices.push({ k: 'formazione', t: `Passa alla formazione ${FORMATIONS[lighter].name}: meno posti fissi, più persone ai tavoli` });
+  choices.push({ k: 'spingi', t: `Chiedi ${area === 'bar' ? 'al Genius Bar' : area === 'creative' ? 'ai Creative' : 'al floor'} di andare più veloce per due ore` });
+  openMoment({ type: 'sick', s, was, lighter, title: 'Qualcuno sta male',
+    where: `${s.name} (${TIER[s.tier].label}, ${was.name}) non si sente bene e va a casa.`,
+    says: was.post ? `${was.name} è scoperto: i clienti iniziano ad aspettare.` : 'La squadra ha una persona in meno per il resto della giornata.',
+    choices });
+}
+function stressMoment(s) {
+  const area = TIER[s.tier].area;
+  const calmer = s.post ? `Fallo sostituire (${roleShort(s)}) e mettilo ai tavoli per un'ora`
+    : area === 'bar' ? 'Per un\'ora affidagli solo riparazioni rapide'
+    : area === 'creative' ? 'Per un\'ora lascialo agli accessori, senza lezioni'
+    : 'Dagli un\'ora più leggera ai tavoli';
+  openMoment({ type: 'stress', s, title: 'Qualcuno è al limite',
+    where: `${s.name} (${TIER[s.tier].label}, ${roleShort(s)}) ha lo stress a ${Math.round(s.stats.stress)}.`,
+    says: 'Risponde in fretta e i clienti se ne accorgono. Se finisce la giornata così, domani rischia di restare a casa.',
+    choices: [
+      { k: 'pausa', t: 'Mandalo in pausa adesso' },
+      { k: 'sposta', t: calmer },
+      { k: 'tieni', t: 'Chiedigli di tenere duro fino al cambio' },
+    ] });
+}
+function saleMoment(s, c) {
+  openMoment({ type: 'sale', s, title: 'Una grande vendita',
+    where: `${s.name} (${TIER[s.tier].label}) ha venduto ${PRODUCT_NAME[c.product]} con ${c.accName} e AppleCare.`,
+    says: 'Il cliente esce contento, e una parte della squadra ha visto come ci è arrivato.',
+    choices: [
+      { k: 'pubblico', t: 'Riconoscilo davanti alla squadra' },
+      { k: 'privato', t: 'Ringrazialo in privato' },
+      { k: 'dd', t: 'Chiedigli di raccontarla al prossimo DD' },
+      { k: 'niente', t: 'Non dire niente, è il suo lavoro' },
+    ] });
+}
+function errorMoment(s, c) {
+  openMoment({ type: 'error', s, c, title: 'Un errore serio',
+    where: `${s.name} (${TIER[s.tier].label}) ${ERROR_TEXT[s.role]}.`,
+    says: 'Il cliente è irritato e lo fa capire. Ti stai avvicinando al tavolo.',
+    choices: [
+      { k: 'affianca', t: 'Affiancalo e rimediate insieme con il cliente' },
+      { k: 'privato', t: 'Lascia che finisca, poi ne parlate in privato' },
+      { k: 'davanti', t: 'Correggilo subito davanti al cliente' },
+      { k: 'lascia', t: 'Lascia correre' },
+    ] });
+}
+function renderMoment() {
+  const m = game.moment;
+  document.getElementById('mTitle').textContent = m.result ? 'Com\'è andata' : m.title;
+  document.getElementById('mWhere').textContent = m.where;
+  document.getElementById('mSteps').innerHTML = '';
+  if (!m.order) m.order = [...m.choices].sort(() => Math.random() - 0.5);
+  document.getElementById('mBody').innerHTML = m.result
+    ? `<div class="mResult">${m.result.text}</div><button class="on" id="mDone">Continua</button>`
+    : `<div class="mSays">${m.says}</div><div class="mChoices">${m.order.map(o => `<button data-k="${o.k}">${o.t}</button>`).join('')}</div>`;
+  document.getElementById('moment').classList.add('show');
+}
+function chooseMoment(k) {
+  const m = game.moment, s = m.s, n = s.name;
+  const mates = game.staff.filter(x => x !== s && TIER[x.tier].area === TIER[s.tier].area && !onBreak(x));
+  let text, good;
+  if (m.type === 'sick') {
+    const w = m.was;
+    if (k === 'copri') {
+      const sub = coverPost(w); good = true;
+      text = w.post ? (sub ? `${sub.name} copre ${w.name}: un tavolo in meno, ma il posto resta aperto.` : `Non c'è nessuno libero: ${w.name} resta scoperto per un po'.`)
+        : 'La squadra assorbe i suoi clienti: un po\' più di attesa e di stress per gli altri.';
+    } else if (k === 'formazione') {
+      changeFormation(m.lighter, 'midday'); good = true;
+      text = `Passate alla formazione ${FORMATIONS[m.lighter].name}: meno posti fissi e più persone ai tavoli. Ognuno cambia posto appena finisce con il suo cliente.`;
+    } else {
+      coverPost(w);
+      game.push = { area: TIER[s.tier].area, until: game.time + 120 }; good = false;
+      text = 'Per due ore la squadra va più veloce e le code si accorciano, ma lo stress sale di più e qualche cliente sente la fretta.';
+    }
+  } else if (m.type === 'stress') {
+    if (k === 'pausa') {
+      s.wantsBreak = true; bump(s, 'stress', -5); good = true;
+      text = `${n} va in pausa appena finisce con il cliente: in un quarto d'ora lo stress scende di circa 20 punti.` + (s.post ? ' Un collega prende il suo posto.' : '');
+    } else if (k === 'sposta') {
+      s.calmUntil = game.time + 60; good = true;
+      if (s.post) {
+        const sub = game.staff.filter(y => y.rota === s.rota && y !== s && !y.post && !onBreak(y)).sort((a, b) => a.stats.stress - b.stats.stress)[0];
+        if (sub) { const a = s.slot; s.nextSlot = sub.slot; sub.nextSlot = a; }
+      }
+      text = `Per un'ora ${n} lavora con meno pressione: lo stress sale la metà del solito, e resta in squadra.`;
+    } else {
+      bump(s, 'mot', -4); good = false;
+      text = `${n} resta dov'è. Lo stress continua a salire, la motivazione cala un po' e cresce il rischio che domani resti a casa.`;
+    }
+  } else if (m.type === 'sale') {
+    if (k === 'pubblico') {
+      bump(s, 'mot', 8); mates.forEach(x => bump(x, 'mot', 2)); good = true;
+      text = `Riconoscerlo davanti a tutti ha dato energia alla squadra: motivazione su per ${n} e un po' per i colleghi.`;
+    } else if (k === 'privato') {
+      bump(s, 'mot', 6); good = true;
+      text = `Il grazie in privato ha alzato la motivazione di ${n}.`;
+    } else if (k === 'dd') {
+      bump(s, 'comp', 2); bump(s, 'mot', 3); mates.forEach(x => bump(x, 'comp', 0.5)); good = true;
+      text = `Raccontata al DD, la vendita diventa un esempio: ${n} si sente valorizzato e la squadra impara come ci è arrivato.`;
+    } else {
+      bump(s, 'mot', -3); good = false;
+      text = `Una bella vendita passata sotto silenzio: la motivazione di ${n} cala un po'.`;
+    }
+  } else {
+    const c = m.c;
+    if (k === 'affianca') {
+      c.exp += 18; c.recovered = true; bump(s, 'comp', 2); bump(s, 'stress', 2); good = true;
+      text = `Affiancarlo ha recuperato il cliente, e ${n} ha visto come si rimedia: competenza su.`;
+    } else if (k === 'privato') {
+      bump(s, 'comp', 3); bump(s, 'mot', -1); good = true;
+      text = `Il cliente resta deluso, ma il confronto in privato aiuta ${n} a non ripeterlo: competenza su.`;
+    } else if (k === 'davanti') {
+      c.exp += 5; bump(s, 'mot', -10); bump(s, 'stress', 8); good = false;
+      text = `Correggerlo davanti al cliente ha sistemato poco e ha pesato su ${n}: motivazione giù, stress su.`;
+    } else {
+      good = false;
+      text = 'Nessuno ne parla: il cliente se ne va deluso e l\'errore può ripetersi.';
+    }
+  }
+  m.result = { text, good };
+}
+function closeMoment() {
+  const m = game.moment;
+  game.lessons.push({ t: game.time, name: m.s.name, title: m.title, text: m.result.text, good: m.result.good });
+  log(`${m.title}: ${m.s.name}`);
+  game.moment = null;
+  document.getElementById('moment').classList.remove('show');
+}
+document.getElementById('mBody').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b || !game.moment) return;
+  if (b.id === 'mDone') { closeMoment(); return; }
+  chooseMoment(b.dataset.k);
+  renderMoment();
+});
+
+// ── Dopo l'acquisto. Il trasferimento dei dati da telefono a telefono, o il recupero da iCloud,
+// richiede 30–60 minuti: c'è chi lo fa al Today at Apple. Chi ha rimandato il Trade In, finito il
+// trasferimento torna da uno Specialist con il vecchio telefono.
+function afterPurchase(c) {
+  if (!c.setup || c.setupDone || game.time > CLOSE - 35) { leave(c, 'bought'); return; }
+  releaseSlot(c);
+  const seat = STOOLS.find(x => !x.taken);
+  const spot = seat || { x: rand(470, 930), y: rand(1440, 1700) };   // se gli sgabelli sono pieni si resta in piedi lì vicino
+  if (seat) { seat.taken = c; c.slot = seat; } else c.standing = true;
+  c.state = 'toSetup'; c.bubble = null; goTo(c, spot);
+  game.stats.setupsStarted++;
+  log(`Un cliente avvia il setup per ${c.setup === 'icloud' ? 'recuperare i dati da iCloud' : 'trasferire i dati sul nuovo iPhone'}`);
+}
+function backForTrade(c) {
+  releaseSlot(c);
+  const free = SLOTS.filter(x => !x.taken && (x.table.product === 'iphone' || x.table.product === 'help'));
+  if (!free.length) { c.state = 'waitTrade'; return; }               // tutti i tavoli occupati: aspetta al Today at Apple
+  const slot = free.sort((a, b) => dist(a, c) - dist(b, c))[0];
+  slot.taken = c; c.slot = slot; c.tradeOnly = true; c.wait = 0;
+  c.state = 'toTable'; goTo(c, slot);
+  log('Trasferimento finito: il cliente porta il vecchio telefono a uno Specialist per il Trade In');
+}
+
+function finishSale(s, c, bought) {
+  const st = game.stats;
+  s.served++;
+  if (bought) {
+    st.sold++; c.saleCounted = true;
+    if (c.accessory) st.accessories++;
+    if (c.service) st.services++;
+    if (c.tradeDone) st.tradeIns++;
+    if (c.financeDone) st.finance++;
+    log(`${s.name} vende ${PRODUCT_NAME[c.product]}${c.accessory ? ' + ' + c.accName : ''}${c.service ? ' + AppleCare' : ''}${c.pending ? ': il cliente aspetta dal backstage' : ''}`);
+    if (c.pending) { c.state = 'waitDelivery'; say(c, 'wait', 999); s.state = 'waitProduct'; say(s, 'wait', 999); }
+    else { c.staff = null; s.customer = null; afterPurchase(c); }
+    if (c.accessory && c.service && leaderReady('sale') && Math.random() < 0.6) saleMoment(s, c);
+    if (c.pending) return;
+  } else leave(c, 'browsed');
+  s.customer = null; s.state = 'idle'; s.t = rand(1, 3);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Today at Apple
+// ─────────────────────────────────────────────────────────────
+const presentsSoon = s => game.sessions.some(z => z.presenter === s && z.state !== 'done' && z.start - game.time < 20);
+function updateSessions() {
+  for (const ses of game.sessions) {
+    const t = game.time;
+    if (ses.state === 'planned' && t >= ses.start - 25) {
+      // tiene la lezione il Creative che ne ha fatte meno oggi
+      const free = game.staff.filter(x => x.role === 'creative').sort((a, b) => (a.calmUntil > t) - (b.calmUntil > t) || a.sessions - b.sessions);
+      if (!free.length) { ses.state = 'done'; continue; }
+      ses.presenter = free[0]; ses.presenter.sessions++;
+      ses.state = 'arriving';
+    }
+    const creative = ses.presenter;
+    if (ses.state === 'arriving') {
+      if (t >= ses.start - 8 && creative.state !== 'toStage' && creative.state !== 'onStage' && !creative.customer && !onBreak(creative)) {
+        creative.state = 'toStage'; goTo(creative, STAGE);
+      }
+      if (t >= ses.start && (creative.state === 'onStage' || creative.state === 'toStage')) {
+        ses.state = 'live'; creative.state = 'presenting'; creative.facing = 'up';
+        log(`${creative.name} (${TIER[creative.tier].label}) inizia «${ses.title}»`);
+      }
+    }
+    if (ses.state === 'live' && t >= ses.end) {
+      ses.state = 'done';
+      creative.state = 'idle'; creative.t = rand(2, 4); goTo(creative, creative.home);
+      // dopo la lezione qualche partecipante vuole diventare proprietario
+      let n = 0;
+      for (const c of game.customers.filter(x => x.state === 'seated')) {
+        if (Math.random() < TIER[creative.tier].convert + (ddOn('creative', 'lezioni') ? 0.3 * ddMult() : 0)) { convertFromToday(c); n++; }
+      }
+      log(`Fine di «${ses.title}»` + (n ? `: ${n} partecipant${n > 1 ? 'i vogliono' : 'e vuole'} comprare` : ''));
+    }
+  }
+}
+function convertFromToday(c) {
+  releaseSlot(c);
+  c.kind = 'buy'; c.fromToday = true;
+  c.product = pick(['iphone', 'ipad', 'ipad', 'mac', 'watch']);
+  c.need = pick(NEEDS[c.product]);
+  c.exp += 5;
+  game.stats.buyers++; game.stats.todayConv++;
+  say(c, 'star', 2);
+  proceed(c);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Arrivi e ciclo della giornata
+// ─────────────────────────────────────────────────────────────
+// Gli arrivi della giornata si decidono all'apertura, con un seme a parte: nei livelli i clienti sono sempre
+// gli stessi, qualunque strategia si scelga. Il sabato è il giorno più pieno, poi la domenica.
+let TRAFFIC = 2.1;                    // quanti clienti entrano: moltiplica l'affluenza oraria
+const KIND_MIX = { buy: 0.47, help: 0.05, acc: 0.22, genius: 0.2, look: 0.06 };   // genius: chi arriva senza appuntamento
+function buildArrivals(seed, opts = {}) {
+  const r = mulberry(seed), R = (a, b) => a + r() * (b - a), P = arr => arr[Math.floor(r() * arr.length)];
+  const mix = { ...KIND_MIX, ...(opts.mix || {}) };
+  const tot = Object.values(mix).reduce((a, b) => a + b, 0);
+  const repairs = opts.repairs || [0.5, 0.35, 0.15], wet = game.weather === 'pioggia';
+  const list = [];
+  const one = t => {
+    let q = r() * tot, kind = 'look';
+    for (const [k, w] of Object.entries(mix)) { if (q < w) { kind = k; break; } q -= w; }
+    const extra = { look: { skin: P(SKIN), hair: P(HAIR), shirt: P(SHIRTS), pants: P(PANTS) },
+      exp: wet ? R(61, 73) : R(64, 76), rude: r() < (wet ? 0.13 : 0.08) };
+    if (kind === 'look' && wet && r() < 0.65) return;                      // con la pioggia i curiosi restano a casa
+    if (kind === 'buy') {
+      // chi viene per un prodotto: 50% iPhone, 20% Watch, 15% iPad, 15% Mac
+      if (opts.products) extra.product = P(opts.products);
+      else { const q = r(); extra.product = q < 0.5 ? 'iphone' : q < 0.7 ? 'watch' : q < 0.85 ? 'ipad' : 'mac'; }
+      extra.need = P(NEEDS[extra.product]);
+      // vendite molto diverse: chi sa già cosa vuole, chi porta il vecchio telefono, chi chiede il finanziamento
+      extra.fast = r() < 0.32;
+      extra.complex = r() < 0.05;                             // esigenze più elevate: serve un Expert o un Pro
+      extra.tradeIn = r() < ({ iphone: 0.33, ipad: 0.12, mac: 0.1 }[extra.product] || 0);
+      extra.finance = r() < ({ mac: 0.18, iphone: 0.1, ipad: 0.08 }[extra.product] || 0.03);
+      // dopo l'acquisto di un iPhone: c'è chi trasferisce i dati al Today at Apple e poi fa il Trade In,
+      // chi fa subito il Trade In e recupera da iCloud al Today at Apple, chi va a casa
+      if (extra.product === 'iphone') {
+        const q = r();
+        extra.setup = extra.tradeIn ? (q < 0.4 ? 'transferThenTrade' : q < 0.65 ? 'icloud' : null) : (q < 0.25 ? 'transfer' : null);
+      }
+    }
+    if (kind === 'genius') { const x = r(); extra.repair = x < repairs[0] ? 0 : x < repairs[0] + repairs[1] ? 1 : 2; }
+    list.push({ t, kind, extra });
+    if (kind === 'look' && game.weather === 'sole' && r() < 0.3) one(t + 0.5);   // col sole passa qualche curioso in più
+  };
+  const crowd = Math.floor(R(5, 11) * (opts.traffic || 1));
+  for (let i = 0; i < crowd; i++) one(OPEN);
+  const dayMult = [1.45, 1, 1, 1, 1, 1.1, 1.75][game.date.getDay()] * (opts.traffic || 1);
+  let accum = 0;
+  for (let t = OPEN; t < LAST_ENTRY; t += 0.25) {
+    accum += (RATE[Math.floor(t / 60)] || 6) * TRAFFIC * dayMult / 60 * 0.25;
+    while (accum >= 1) { accum -= 1 + R(-0.4, 0.4); one(t + R(0, 0.25)); }
+  }
+  return list.sort((a, b) => a.t - b.t);
+}
+function spawnArrivals() {
+  let n = 0;
+  while (game.arrivals.length && game.arrivals[0].t <= game.time) { const a = game.arrivals.shift(); spawnCustomer(a.kind, { ...a.extra, look: { ...a.extra.look } }); n++; }
+  return n;
+}
+
+function step(dt) {
+  if (modePicking || game.over || game.briefing || game.moment || game.planning || game.checkpoint) return;
+  const stop = playerMode ? playerMode.shiftEnd() : CLOSE;
+  if (game.time >= stop) {
+    game.time = stop;
+    if (playerMode) finishPlayerShift(); else closeStore();
+    return;
+  }
+  dt = Math.min(Math.max(0, Number(dt) || 0), stop - game.time);
+  if (game.observationConfig) dt = observation.limit(dt);
+  if (dt <= 0) return;
+  const before = game.time;
+  game.time += dt;
+  if (before < OPEN && game.time >= OPEN) log(`Porte aperte: entrano ${spawnArrivals()} clienti che aspettavano fuori`);
+  if (game.time >= game.nextRotation && game.time < CLOSE - 30) planRotation();
+  if (STRATEGY_ON && CHECKPOINTS.some(t => before < t && game.time >= t)) {
+    if (window.autoCheckpoint) window.autoCheckpoint(game);       // per i test: la strategia cambia da sola
+    else if (!window.autoCoach) { showCheckpoint(); return; }
+  }
+  // ogni mezz'ora qualcuno può sentirsi male, più facilmente se è stressato
+  if (Math.floor(game.time / 30) !== Math.floor(before / 30) && game.time > OPEN + 30 && game.time < CLOSE - 60 && game.stats.sickNow < 2) {
+    for (const x of game.staff.filter(y => !y.isPlayer && !onBreak(y) && !y.hidden && y.rota !== 'out')) {
+      if (Math.random() < 0.0015 + Math.max(0, x.stats.stress - 50) / 600) { fallIll(x); break; }
+    }
+  }
+  if (leaderReady('stress') && Math.floor(game.time / 10) !== Math.floor(before / 10)) {
+    const s = game.staff.filter(x => x.stats.stress >= 70 && !onBreak(x) && !x.wantsBreak).sort((a, b) => b.stats.stress - a.stats.stress)[0];
+    if (s) stressMoment(s);
+  }
+  spawnArrivals();
+  updateSessions();
+  updateLine(game.lineIn, POINT_IN, [POINT_IN2]);
+  updateLine(game.lineGB, POINT_GB);
+  updateLine(game.lineEx, EXPRESS);
+  dispatch();
+  game.customers.forEach(c => updateCustomer(c, dt));
+  game.staff.forEach(s => updateStaff(s, dt));
+  if (playerMode) playerMode.step(dt);
+  game.customers = game.customers.filter(c => !c.gone);
+  game.staff = game.staff.filter(x => !x.gone);
+  [...game.customers, ...game.staff].forEach(e => { if (e.bubble && game.time > e.bubble.until) e.bubble = null; });
+
+  if (game.observationConfig) observation.afterStep();
+  if (game.time >= stop) {
+    game.time = stop;
+    if (playerMode) finishPlayerShift(); else closeStore();
+  }
+}
+
+function finishPlayerShift() {
+  if (!playerMode || game.over) return false;
+  playerMode.beforeClose();
+  log(`Il tuo turno termina alle ${fmt(game.time)}. Lo store continua a lavorare.`);
+  endDay();
+  return true;
+}
+
+// Alle 20 la giornata finisce. I percorsi ancora aperti restano incompleti:
+// la chiusura non trasforma un ordine o una pratica in corso in una consegna o un servizio concluso.
+function closeStore() {
+  const st = game.stats;
+  if (playerMode) playerMode.beforeClose();
+  for (const c of game.customers) {
+    if (c.state === 'leaving' || c.outcome) continue;
+    if (STRATEGY_ON && !SPECIALIST_ON && c.kind === 'buy' && c.bought && !c.saleCounted) {
+      c.saleCounted = true; st.sold++;
+      if (c.accessory) st.accessories++;
+      if (c.service) st.services++;
+      if (c.tradeDone) st.tradeIns++;
+      if (c.financeDone) st.finance++;
+    }
+    const repairing = c.kind === 'genius' && c.staff && c.staff.state === 'repair';
+    if (STRATEGY_ON && !SPECIALIST_ON && repairing) st.genius++;
+    if (!STRATEGY_ON || SPECIALIST_ON) { st.unfinished++; leave(c, 'unfinished'); }
+    else leave(c, c.bought || c.tradeOnly ? 'bought' : repairing ? 'fixed' : c.kind === 'look' ? 'looked' : 'browsed');
+  }
+  if (game.observationLedger) {
+    const pending = Object.values(game.observationLedger.journeys).filter(j => !j.outcome).length;
+    st.unfinished += pending;
+    window.PLObservation.finishLedger(game.observationLedger, game.time);
+  }
+  for (const x of game.staff) { x.customer = null; x.order = null; x.batch = []; }
+  game.orders = []; game.customers = [];
+  log('Chiusura alle 20:00');
+  endDay();
+}
+
+function teamDelta() {
+  const avg = (k, from) => game.staff.reduce((a, x) => a + (from ? x.start : x.stats)[k], 0) / game.staff.length;
+  if (!game.staff.length) return [['Team', 'Nessuna persona in turno']];
+  const d = k => { const a = avg(k, true), b = avg(k, false), v = Math.round(b - a); return `${Math.round(b)} <small>(${v >= 0 ? '+' : ''}${v})</small>`; };
+  return [['Team · motivazione', d('mot')], ['Team · stress', d('stress')], ['Team · competenza', d('comp')]];
+}
+
+function updatePlayerDebrief() {
+  const view = playerMode.view(), p = view.stats, shift = view.shift;
+  document.getElementById('dbPlayerStats').innerHTML = rows([
+    ['Ruolo', window.PLCareerProgression.role(TEAM.Tu.tier).label],
+    ['Turno di oggi', `${fmt(shift.start)}–${fmt(shift.end)} · ${shift.hours} ore`],
+    ['Contratto del turno', `${shift.weeklyHours} ore/settimana · 5 giorni`],
+    ['Stress a fine turno', Math.round(TEAM.Tu.stress)],
+    ['Motivazione a fine turno', Math.round(TEAM.Tu.mot)],
+    ['Apprendimento a fine turno', `${Math.round(window.PLCareerProgression.learningRate(TEAM.Tu) * 100)}%`],
+    ['Competenza nel ruolo', `${(Math.floor(TEAM.Tu.comp * 10) / 10).toLocaleString('it-IT')} / 100`],
+    ['Clienti conclusi', p.served], ['Dispositivi consegnati', p.sales],
+    ['Accessori', p.accessories], ['Servizi', p.services], ['Persone aiutate', p.helped],
+    ['Setup completati', p.setups], ['Visite ancora aperte', p.open],
+  ]);
+}
+
+function endDay() {
+  if (game.over) return false;
+  game.over = true;
+  saveCareerCheckpoint('completed');
+  document.getElementById('dbTitle').textContent = SPECIALIST_ON ? 'Il tuo turno è finito' : 'La giornata è finita';
+  document.getElementById('dbPlayerStats').hidden = !playerMode;
+  document.getElementById('dbStoreResults').open = !playerMode;
+  document.getElementById('dbStoreSummary').textContent = playerMode ? 'Situazione dello store alle ' + fmt(game.time) : 'Risultati dello store';
+  document.getElementById('nextDay').textContent = playerMode ? 'Prossimo turno' : 'Apri il giorno dopo';
+  if (playerMode) updatePlayerDebrief();
+  else document.getElementById('dbPlayerStats').innerHTML = '';
+  const s = game.stats, L = game.level;
+  document.getElementById('dbRetry').hidden = !L;
+  document.getElementById('nextDay').hidden = !!L;
+  if (L) {
+    const i = game.levelIndex, v = objValue(L.goal.key), st = starsFor(L, v);
+    const prev = progress[i];
+    const gateFail = L.gate && !meets(L.gate.key, objValue(L.gate.key), L.gate.min);
+    if (!prev || st > prev.stars || (st === prev.stars && (OBJ[L.goal.key].better < 0 ? v < prev.value : v > prev.value))) progress[i] = { stars: st, value: v };
+    saveProgress();
+    document.getElementById('dbGoal').innerHTML = `
+      <div class="bigStars">${starStr(st)}</div>
+      <div class="goalBox"><b>🎯 ${OBJ[L.goal.key].label}: ${objFmt(L.goal.key, v)}</b><br><span class="sub">${goalLine(L)}</span>
+        ${gateFail ? `<br><b>${OBJ[L.gate.key].label} ${objFmt(L.gate.key, objValue(L.gate.key))}: sotto il minimo di ${objFmt(L.gate.key, L.gate.min)}, al massimo una stella.</b>` : ''}
+        ${prev ? `<br><span class="sub">Tentativo precedente migliore: ${starStr(prev.stars)} con ${objFmt(L.goal.key, prev.value)}</span>` : ''}</div>
+      <h3>La tua strategia</h3><div class="sub">${game.history.join('<br>')}</div>
+      ${st < 3 ? `<h3>Spunto</h3><div class="sub">${L.hint}</div>` : `<h3>Cosa ha contato</h3><div class="sub">${L.lesson}</div>`}
+      ${st > 0 && st < 3 && prev && prev.stars > 0 ? `<details><summary>Mostra cosa conta in questo livello</summary><div class="sub">${L.lesson}</div></details>` : ''}`;
+    const next = document.getElementById('dbNextLv');
+    next.hidden = !(i + 1 < LEVELS.length && unlocked(i + 1));
+  } else { document.getElementById('dbGoal').innerHTML = ''; document.getElementById('dbNextLv').hidden = true; }
+  document.getElementById('dbDate').textContent = `${WEEKDAYS[game.date.getDay()]} ${game.day} gennaio · ${WEATHER[game.weather].icon} ${WEATHER[game.weather].name}`;
+  document.getElementById('dbStats').innerHTML = rows([
+    ['Clienti entrati', s.entered],
+    ['Vendite', s.sold],
+    ['Conversion', s.buyers ? Math.round(s.sold / s.buyers * 100) + '%' : '–'],
+    ['NPS', `${fmtNps(nps())} <small>(${game.reviews.length} commenti)</small>`],
+    ['NPS Vendita · Bar', `${fmtNps(nps('vendita'))} · ${fmtNps(nps('bar'))}`],
+    ['Promotori · passivi · detrattori', `${game.reviews.filter(r => r.score === 5).length} · ${game.reviews.filter(r => r.score === 4).length} · ${game.reviews.filter(r => r.score <= 3).length}`],
+    ['Errori', s.errors],
+    ['Con accessorio', s.accessories],
+    ['Servizi (AppleCare)', s.services],
+    ['Trade In · finanziamenti', `${s.tradeIns} · ${s.finance}`],
+    ['Clienti esigenti: supporto chiesto · dato · mancato', `${s.helpAsked} · ${s.helpGiven} · ${s.helpMissed}`],
+    ['Setup avviati · completati', `${s.setupsStarted} · ${s.setups}`],
+    [playerMode ? 'Clienti ancora sul floor a fine turno' : 'Percorsi ancora aperti alla chiusura', playerMode ? game.customers.filter(c => !c.gone && !c.outcome).length : s.unfinished],
+    ['…poi tornati per il Trade In', s.tradeAfter],
+    ['Accessori all\'Express (B1)', s.express],
+    ['Express: richieste runner · consegne concluse', `${s.expressRunnerRequested} · ${s.expressRunnerDelivered}`],
+    ['Accessori alle pareti', s.wallSales],
+    ['Consegne dal backstage', s.delivered],
+    ['…portate insieme ad altre nello stesso giro', s.batched],
+    ['Attesa media del prodotto', s.delivered ? (s.deliverySum / s.delivered).toFixed(1) + ' min' : '–'],
+    ['Accessori presi dalla parete', s.fromWall],
+    ['Risolti al Genius Bar', s.genius],
+    ['Appuntamenti Genius Bar fatti', `${(game.agenda || []).filter(a => a.status === 'fatto').length} su ${(game.agenda || []).length}`],
+    ['…non presentati', (game.agenda || []).filter(a => a.status === 'atteso' && a.t <= game.time).length],
+    ['…iniziati con più di 10 minuti di ritardo', `${s.apptLate}${s.apptStarted ? ` (ritardo medio ${(s.apptDelay / s.apptStarted).toFixed(0)} min)` : ''}`],
+    ['Senza appuntamento: fissati oggi · rimandati', `${s.walkinBooked} · ${s.walkinLater}`],
+    ['Aiutati ai tavoli C1 e C5', s.helped],
+    ['Solo a guardare', s.looked + s.today],
+    ['…di cui fermi al Today at Apple', s.today],
+    ['Diventati clienti dopo una lezione', s.todayConv],
+    ['Persi senza essere seguiti', s.lost],
+    ['Clienti scortesi', s.rude],
+    ['Pause date', s.breaks],
+    ['Andati a casa malati', s.sickNow],
+    [playerMode ? 'Formazione del turno' : 'Formazione a fine giornata', FORMATIONS[game.formation].name],
+    ['Attesa media', s.waitN ? (s.waitSum / s.waitN).toFixed(1) + ' min' : '–'],
+    ...teamDelta(),
+  ]);
+  document.getElementById('dbLessons').innerHTML = game.lessons.length
+    ? '<h3>Momenti da leader</h3>' + game.lessons.map(l => `<div>${l.good ? '✓' : '·'} <b>${l.title}</b> · ${l.name}, ${fmt(l.t)}: ${l.text}</div>`).join('')
+    : '';
+  document.getElementById('debrief').classList.add('show');
+}
+
+// Rendering del floor 3D
+function render(realDt = 0) {
+  if (!floorRenderer || !floorReady) return;
+  try { floorRenderer.render(window.PLFloorView.snapshot(), realDt); }
+  catch (error) {
+    window.PLFloorViewUI.fail('render');
+    console.warn('Il floor 3D è stato sospeso.', error);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pannello laterale
+// ─────────────────────────────────────────────────────────────
+const rows = list => list.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
+const STATE_LABEL = {
+  approach: 'accoglie il cliente · Approach', listen: 'ascolta dubbi e verifica la soluzione · Listen',
+  toExpert: 'raggiunge una persona esperta', expertAdvice: 'chiede un consiglio', fromExpert: 'torna dal cliente',
+  inLine: 'in fila per il Point', toPoint: 'va dal Point', talking: 'dice al Point cosa cerca', toTable: 'va al tavolo', waiting: 'aspetta qualcuno',
+  toAccWall: 'accompagna il cliente alla parete accessori', atAccWall: 'sceglie l\'accessorio con il cliente', backToTable: 'torna al tavolo con il cliente', waitHelp: 'aspetta un Expert per un cliente esigente', toHelp: 'va ad affiancare un collega', assist: 'affianca un collega con un cliente esigente', served: 'viene seguito', escorted: 'va con lo Specialist alla parete accessori', toSetup: 'va al Today at Apple per i dati', setup: 'trasferisce i dati al Today at Apple', waitTrade: 'aspetta un tavolo libero per il Trade In', tradeOnly: 'fa il Trade In del vecchio telefono', waitDelivery: 'aspetta il prodotto dal backstage', waitProduct: 'aspetta il prodotto col cliente', handover: 'consegna il prodotto al cliente', toQueue: 'va in attesa', queued: 'in coda per il Genius Bar', toBar: 'va al Genius Bar',
+  atBar: 'al Genius Bar', toSession: 'va al Today at Apple', seated: 'si ferma al Today at Apple', toLook: 'va a guardare', looking: 'guarda i prodotti',
+  toWall: 'va alla parete accessori', pickWall: 'sceglie un accessorio', waitWall: 'aspetta qualcuno alla parete', servedWall: 'viene consigliato',
+  toWallCustomer: 'va da un cliente alla parete', advise: 'consiglia un accessorio', leaving: 'esce',
+  helping: 'aiuta un cliente', leavingSick: 'va a casa, non sta bene', idle: 'libero', wander: 'gira nella sua zona', listening: 'ascolta un cliente', escort: 'accompagna al Genius Bar', toCustomer: 'va da un cliente',
+  probe: 'fa domande', demo: 'fa la demo', checkout: 'chiude la vendita', repair: 'ripara',
+huddle: 'momento di squadra', training: 'in formazione', toBreak: 'va in pausa', onBreak: 'in pausa', fromBreak: 'torna dalla pausa',
+  toStage: 'va allo schermo', onStage: 'prepara la sessione', presenting: 'tiene la sessione',
+};
+const roleShort = x => x.isPlayer ? 'il tuo turno' : x.state === 'leavingSick' ? 'va a casa' : onBreak(x) ? 'pausa' : x.slot !== undefined ? rotaOf(x)[x.slot].name : x.role === 'ops' ? OPS_LABEL[x.state] || 'Operations' : x.role === 'lead' ? 'gira sul floor' : 'Today at Apple';
+STATE_LABEL.tradeIn = 'valuta il dispositivo per il Trade In';
+STATE_LABEL.financing = 'prepara il finanziamento';
+STATE_LABEL.unfinished = 'visita rimasta aperta alla chiusura';
+const OPS_LABEL = { idle: 'in backstage', toBack: 'va in backstage', picking: 'prende un prodotto in backstage', delivering: 'consegna un prodotto', handing: 'consegna un prodotto', returning: 'torna al backstage' };
+const ROLE_LABEL = { point: 'Point', express: 'Cassa Express', accessori: 'Specialist accessori', specialist: 'Specialist', genius: 'Genius', creative: 'Creative', ops: 'Operations', lead: 'Lead' };
+
+let lastPanel = 0;
+function updatePanel() {
+  if (observation) window.PLObservationUI.render(observation.view);
+  const personalView = playerMode ? playerMode.view() : { enabled: false };
+  if (careerPromotionNotice && personalView.enabled) personalView.message = careerPromotionNotice;
+  window.PLSpecialistUI.render(personalView);
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
+  document.getElementById('clock').textContent = fmt(Math.max(OPEN - 2, game.time));
+  const open = game.time >= OPEN && game.time < CLOSE;
+  document.getElementById('date').textContent =
+    `${WEEKDAYS[game.date.getDay()].slice(0, 3)} ${game.day} gen · ${WEATHER[game.weather].icon} · ${open ? 'aperto' : game.time < OPEN ? 'in apertura' : 'chiuso'}`;
+  const s = game.stats, inStore = game.customers.length;
+  const waiting = game.customers.filter(c => c.state === 'waiting').length;
+  const queue = game.customers.filter(c => c.state === 'queued').length + game.lineGB.length;
+  document.getElementById('stats').innerHTML = rows([
+    ['Clienti nello store', inStore],
+    ['In fila dal Point', game.lineIn.length],
+    ['Aspettano qualcuno', waiting],
+    ['In coda Genius', queue],
+    ['NPS · Vendita · Bar', `${fmtNps(nps())} · ${fmtNps(nps('vendita'))} · ${fmtNps(nps('bar'))}`],
+    ['Entrati oggi', s.entered],
+    ['Vendite', s.sold + (s.accessories ? ` <small>(+${s.accessories} acc.)</small>` : '')],
+    ['Accessori Express · pareti', `${s.express} · ${s.wallSales}`],
+    ['Servizi · errori', `${s.services} · ${s.errors}`],
+    ['In fila all\'Express', game.lineEx.length],
+    ['Express: aspettano il runner', game.customers.filter(c => c.expressAwaiting && !c.outcome).length],
+    ['Express: consegne runner', `${s.expressRunnerDelivered} / ${s.expressRunnerRequested}`],
+    ['Genius risolti', s.genius],
+    ['Solo a guardare', s.looked + s.today],
+    ['Fermi al Today', s.today],
+    ['Persi', s.lost],
+    ['Aspettano il prodotto', game.customers.filter(c => c.state === 'waitDelivery').length],
+    ['Ordini in backstage', game.orders.filter(o => !o.done).length],
+    ['Attesa media del prodotto', s.delivered ? (s.deliverySum / s.delivered).toFixed(1) + ' min' : '–'],
+  ]);
+  document.getElementById('npsRow').innerHTML =
+    `<span>NPS <span class="big">${fmtNps(nps())}</span></span><span>Vendita <b>${fmtNps(nps('vendita'))}</b></span><span>Bar <b>${fmtNps(nps('bar'))}</b></span><span>${game.reviews.length} commenti</span>`;
+  // l'agenda del Genius Bar: i prossimi appuntamenti e come stanno andando
+  {
+    const ag = game.agenda || [], st = game.stats, done = ag.filter(a => a.status === 'fatto').length;
+    const label = a => {
+      if (a.status === 'atteso') return game.time > a.t + 20 ? 'non presentato' : game.time > a.t + 5 ? `<span class="late">non ancora arrivato</span>` : 'atteso';
+      if (a.status === 'arrivato' || a.status === 'in attesa') return game.time > a.t + 5 ? `<span class="late">aspetta da ${Math.round(game.time - a.t)} min</span>` : 'arrivato';
+      return a.status + (a.delay > 10 ? ` <span class="late">(+${Math.round(a.delay)} min)</span>` : '');
+    };
+    const atBar = ag.filter(a => a.status === 'al Genius Bar').length;
+    const next = ag.filter(a => ['atteso', 'arrivato', 'in attesa'].includes(a.status) && !(a.status === 'atteso' && game.time > a.t + 20)).slice(0, 7);
+    document.getElementById('agenda').innerHTML =
+      `<div class="sum">${ag.length} appuntamenti · al Bar ora ${atBar} · fatti ${done} · non presentati ${ag.filter(a => a.status === 'atteso' && game.time > a.t + 20).length} · in ritardo ${st.apptLate}${st.apptStarted ? ` · ritardo medio ${(st.apptDelay / st.apptStarted).toFixed(0)} min` : ''}<br>senza appuntamento: ${st.walkinBooked} fissati oggi (*), ${st.walkinLater} rimandati a un altro giorno</div>` +
+      next.map(a => `<span>${fmt(a.t)}${a.walkin ? '*' : ''}</span><span>${label(a)}</span>`).join('');
+  }
+  const gr = document.getElementById('goalRow'), L = game.level;
+  gr.hidden = !L;
+  if (L) { const v = objValue(L.goal.key); gr.innerHTML = `🎯 ${OBJ[L.goal.key].label} <b>${objFmt(L.goal.key, v)}</b> <span class="stars">${starStr(starsFor(L, v))}</span> <span class="sub">· ${L.goal.stars.map(t => objFmt(L.goal.key, t)).join(' / ')}</span>`; }
+  document.getElementById('reviews').innerHTML = game.reviews.slice(0, 8)
+    .map(r => `<div><span class="score s${r.score}">${r.score}</span>${r.text} <span class="sub">${fmt(r.t)}</span></div>`).join('');
+  const bar = (cls, v) => `<div class="bar ${cls}"><i style="width:${Math.round(v)}%"></i></div>`;
+  const AREAS = [['lead', 'Lead'], ['floor', 'Vendita'], ['bar', 'Genius Bar'], ['creative', 'Creative'], ['ops', 'Operations']];
+  document.getElementById('team').innerHTML = AREAS.map(([a, label]) => `<span class="tHead">${label}</span>` + game.staff.filter(x => TIER[x.tier].area === a)
+    .map(x => `<span>${x.name} <span class="sub">${x.tier} · ${roleShort(x)}</span></span>${bar('bm', x.stats.mot)}${bar('bs', x.stats.stress)}${bar('bc', x.stats.comp)}`).join('')).join('') +
+    `<span class="tHead sub">A riposo oggi: ${game.offToday}${game.vacation.length ? ' · in ferie: ' + game.vacation.join(', ') : ''}${game.sick.length ? ' · malati: ' + game.sick.join(', ') : ''} · formazione ${FORMATIONS[game.formation].name}</span>`;
+  document.getElementById('log').innerHTML = game.log.slice(0, 10).map(l => `<div><span>${fmt(l.t)}</span>${l.msg}</div>`).join('');
+  // Preserve the current controls while the selection details refresh.
+  const sel = selectionView(game.selected);
+  const info = document.getElementById('info');
+  info.querySelector('.tipText').innerHTML = sel.text || '<span class="sub">Tocca una persona o un tavolo</span>';
+  const acts = info.querySelector('.acts');
+  if (acts.dataset.key !== sel.key) { acts.innerHTML = sel.acts; acts.dataset.key = sel.key; }
+}
+
+function staffActions(e) {
+  if (!STRATEGY_ON || SPECIALIST_ON) return { acts: '', key: '' };
+  if (game.briefing || game.planning || game.over || game.time >= CLOSE) return { acts: '', key: '' };
+  let pause, pk;
+  if (onBreak(e)) { pause = `<button disabled>In pausa${e.state === 'onBreak' ? ' fino alle ' + fmt(e.until) : ''}</button>`; pk = 'b' + e.state; }
+  else if (e.wantsBreak) { pause = '<button disabled>In pausa appena libero</button>'; pk = 'w'; }
+  else if (e.lastBreak !== undefined && game.time - e.lastBreak < 60) { pause = `<button disabled>Di nuovo in pausa dalle ${fmt(e.lastBreak + 60)}</button>`; pk = 'c'; }
+  else { pause = `<button data-act="break" data-id="${e.id}">Pausa 15 min</button>`; pk = 'p'; }
+  const kudos = `<button data-act="kudos" data-id="${e.id}"${game.kudos ? '' : ' disabled'}>Complimenti (${game.kudos} oggi)</button>`;
+  return { acts: pause + kudos, key: `${e.id}|${pk}|${game.kudos}` };
+}
+
+function selectionView(e) {
+  const holder = { innerHTML: '' };
+  updateInfo(e, holder);
+  const a = e && e.isStaff ? staffActions(e) : { acts: '', key: '' };
+  return { text: holder.innerHTML, ...a };
+}
+
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act]');
+  if (!b || b.disabled || !STRATEGY_ON || SPECIALIST_ON) return;
+  const x = game.staff.find(y => y.id === b.dataset.id);
+  if (!x) return;
+  if (b.dataset.act === 'break') { x.wantsBreak = true; if (!isAvailable(x)) log(`${x.name} andrà in pausa appena finisce`); }
+  if (b.dataset.act === 'kudos' && game.kudos > 0) {
+    game.kudos--; bump(x, 'mot', 8); bump(x, 'stress', -4); say(x, 'heart', 2);
+    log(`Complimenti a ${x.name}`);
+  }
+  updatePanel();
+});
+
+function updateInfo(e, info) {
+  if (e && e.isTable) {
+    const t = e.table;
+    const here = game.customers.filter(c => (c.slot && c.slot.table === t) || (c.bar && c.bar.table === t)).length;
+    const what = t.kind === 'support' ? 'Genius Bar' : t.kind === 'express' ? 'Cassa Express · accessori rapidi' : PRODUCT_NAME[t.product];
+    info.innerHTML = `<b>Tavolo ${t.name}</b> · ${what}<br><span class="sub">${t.kind === 'express' ? `in fila: ${game.lineEx.length} · aspettano il runner: ${game.customers.filter(c => c.expressAwaiting && !c.outcome).length}` : `clienti al tavolo: ${here}`}</span>`;
+    return;
+  }
+  if (!e || (!e.isStaff && !game.customers.includes(e))) { game.selected = null; info.innerHTML = ''; return; }
+  if (e.isStaff) {
+    info.innerHTML = `<b>${e.name}</b> · ${TIER[e.tier].label} · ${roleShort(e)}${e.nextSlot !== undefined ? ` <span class="sub">→ ${rotaOf(e)[e.nextSlot].name}</span>` : ''}<br>
+      <span class="sub">${e.helpRequester ? 'aiuta ' + e.helpRequester.name + ' · interazione sospesa' : (e.role === 'ops' && OPS_LABEL[e.state]) || STATE_LABEL[e.state] || e.state} · ${e.role === 'ops' ? 'consegne oggi' : 'clienti seguiti oggi'}: ${e.served}</span><br>
+      <span class="sub">Motivazione <b>${Math.round(e.stats.mot)}</b> · Stress <b>${Math.round(e.stats.stress)}</b> · Competenza <b>${Math.round(e.stats.comp)}</b></span>`;
+  } else {
+    info.innerHTML = `<b>Cliente #${e.id}</b> · ${describe(e).replace('cliente ', '')}<br>
+      <span class="sub">Familiarità tecnologica: <b>${['bassa', 'media', 'alta'][e.familiarity]}</b> · Fretta: <b>${['poca', 'media', 'molta'][e.hurry]}</b> · Umore: <b>${e.mood >= 65 ? 'buono' : e.mood >= 40 ? 'neutro' : 'teso'}</b>${e.supportRequests ? '<br>Confronti con una persona esperta: ' + e.supportRequests + ' · attesa aggiuntiva: ' + Math.round(e.supportWait || 0) + ' min' : ''}</span><br>
+      <span class="sub">${e.expressAwaiting ? `aspetta l'accessorio dal runner · da ${(e.dWait || 0).toFixed(1)} min` : STATE_LABEL[e.state] || e.state}${e.staff ? ' · con ' + e.staff.name : ''}${e.state === 'waiting' ? ` · da ${e.wait.toFixed(0)} min` : ''} · esperienza <b>${Math.round(e.exp)}</b>${e.rude ? ' · scortese' : ''}${e.repair !== undefined && e.kind === 'genius' ? ' · riparazione ' + REPAIR_NAME[e.repair] : ''}</span>`;
+  }
+}
+
+document.getElementById('speed').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  game.speed = +b.dataset.s;
+  if (game.speed > 0 && observation) observation.resume();
+  document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b));
+});
+document.getElementById('dbRetry').addEventListener('click', () => { document.getElementById('debrief').classList.remove('show'); startLevel(game.levelIndex); });
+document.getElementById('dbNextLv').addEventListener('click', () => { document.getElementById('debrief').classList.remove('show'); startLevel(game.levelIndex + 1); });
+document.getElementById('dbLevels').addEventListener('click', showLevels);
+document.getElementById('dbLevels').hidden = !STRATEGY_ON;
+document.getElementById('nextDay').addEventListener('click', advanceDay);
+
+// ─────────────────────────────────────────────────────────────
+// Ciclo principale a passo fisso
+// ─────────────────────────────────────────────────────────────
+const FIXED = 0.05; // minuti di gioco per passo
+let acc = 0, last = performance.now();
+function frame(now) {
+  const real = Math.min(0.1, (now - last) / 1000); last = now;
+  if (floorReady) {
+    acc += real * game.speed / REAL_SEC_PER_MIN;
+    while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
+  } else acc = 0;
+  render(real);
+  if (intro.on) drawIntro(real);
+  if (now - lastPanel > 250) { updatePanel(); lastPanel = now; }
+  requestAnimationFrame(frame);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Schermata di presentazione: immagine di Piazza Liberty approvata e saluto del team.
+// ─────────────────────────────────────────────────────────────
+function drawAvatar(svg, look) {
+  const {skin, hair, shirt} = look;
+  svg.innerHTML = `<rect x="3" y="1" width="8" height="7" fill="${hair}"/>
+    <rect x="4" y="4" width="6" height="6" fill="${skin}"/>
+    <path d="M5 6h1v1H5zm3 0h1v1H8z" fill="#26303d"/>
+    <rect x="6" y="10" width="2" height="2" fill="${skin}"/>
+    <rect x="2" y="12" width="10" height="7" fill="${shirt}"/>
+    <rect x="9" y="13" width="2" height="2" fill="#ffffff"/>`;
+}
+const intro = { typed: 0, on: true };
+const INTRO_LINE = 'Connetti e personalizza. Accompagna ogni cliente, offri un’esperienza e cresci una visita alla volta.';
+function drawIntro(dt) {
+  if (intro.typed < INTRO_LINE.length) {
+    intro.typed = Math.min(INTRO_LINE.length, intro.typed + dt * 40);
+    document.getElementById('introText').textContent = INTRO_LINE.slice(0, Math.floor(intro.typed));
+  }
+}
+function showModes() {
+  window.PLCareerWelcome.close();
+  modePicking = true;
+  intro.on = true;
+  intro.typed = INTRO_LINE.length;
+  document.getElementById('introText').textContent = INTRO_LINE;
+  document.getElementById('introBack').hidden = false;
+  document.getElementById('intro').classList.add('show');
+  window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
+}
+function closeModes() {
+  window.PLCareerWelcome.close();
+  modePicking = false;
+  intro.on = false;
+  document.getElementById('intro').classList.remove('show');
+}
+document.getElementById('changeMode').addEventListener('click', showModes);
+document.getElementById('introBack').addEventListener('click', closeModes);
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) intro.typed = INTRO_LINE.length - 1;
+if (window.autoCoach) { intro.on = false; document.getElementById('intro').classList.remove('show'); }
+
+function createPlayerMode() {
+  return window.PLPlayerMode.create({
+    getGame: () => game, OPEN, CLOSE, TEAM, PRODUCT_NAME, STATE_LABEL, goTo, isAvailable, onBreak, serve, log, rand, bump,
+  });
+}
+let playerMode = SPECIALIST_ON ? createPlayerMode() : null;
+window.PLSpecialistUI.bind({
+  next: () => { careerPromotionNotice = ''; if (playerMode) playerMode.takeNext(); updatePanel(); },
+  pause: () => { careerPromotionNotice = ''; if (playerMode) playerMode.requestBreak(); updatePanel(); },
+  focus: () => { if (playerMode) { playerMode.focus(); if (window.PLFloorViewUI) window.PLFloorViewUI.followPlayer(); } updatePanel(); },
+  promote: promoteCareer,
+});
+function saveCareerCheckpoint(phase) {
+  if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;
+  const { mot, stress, comp, tier } = TEAM.Tu;
+  careerCheckpoint = { version: 2, day: game.day, phase, profile: { mot, stress, comp, tier } };
+  if (playerMode) careerCheckpoint.shiftHours = playerMode.view().shift.hours;
+  return window.PLCareerSave.save(careerCheckpoint);
+}
+
+function restoreCareerProfile(snapshot) {
+  const saved = window.PLCareerSave.normalize(snapshot);
+  TEAM.Tu = { cap: 100, off: [], vacWeek: -1, ...saved.profile };
+}
+
+function promoteCareer() {
+  if (!careerStarted || !SPECIALIST_ON || !playerMode || game.level || modePicking || !playerMode.promote()) return false;
+  const persisted = saveCareerCheckpoint(game.over ? 'completed' : 'start');
+  const role = window.PLCareerProgression.role(TEAM.Tu.tier).label;
+  careerPromotionNotice = `Ora sei ${role}. Competenza nel nuovo ruolo: 0 / 100.` +
+    (persisted ? ' Promozione salvata.' : ' Il browser non ha salvato la promozione: esporta la Carriera per conservarla.');
+  if (game.over) updatePlayerDebrief();
+  updatePanel();
+  return true;
+}
+
+function advanceDay() {
+  if (!game.over) return false;
+  document.getElementById('debrief').classList.remove('show');
+  const day = playerMode ? restToNextShift(game.day, game.focus) : game.day % 31 + 1;
+  if (!playerMode && !game.observationConfig) overnight(game.focus);
+  newDay(day);
+  updatePanel();
+  return true;
+}
+
+function restToNextShift(day, focus) {
+  const target = window.PLCareerProgression.nextWorkday(day);
+  let date = day;
+  do { overnight(focus); date = date % 31 + 1; } while (date !== target);
+  return target;
+}
+
+function beginMode(mode, day, opts = {}) {
+  if (!['observation', 'career'].includes(mode)) return false;
+  if (observation) { if (mode === 'observation') observation.enter(); else observation.exit(); }
+  chosenMode = mode;
+  careerPromotionNotice = '';
+  SPECIALIST_ON = mode === 'career';
+  careerStarted = SPECIALIST_ON;
+  window.PLCareerSave.saveMode(mode);
+  playerMode = SPECIALIST_ON ? createPlayerMode() : null;
+  closeModes();
+  document.getElementById('introBack').hidden = true;
+  for (const id of ['levels', 'check', 'moment', 'plan']) document.getElementById(id).classList.remove('show');
+  seedRandom(null);
+  newDay(day, opts);
+  resetSimulationClock(1);
+  updatePanel();
+  return true;
+}
+
+function selectMode(mode) {
+  if (!['observation', 'career'].includes(mode)) return false;
+  if (mode === 'career') delete TEAM.Tu;
+  return beginMode(mode, 7);
+}
+
+function resumeCareer() {
+  if (!careerCheckpoint) return false;
+  const saved = careerCheckpoint;
+  restoreCareerProfile(saved);
+  SPECIALIST_ON = true;
+  let day = saved.day;
+  if (saved.phase === 'completed') {
+    day = restToNextShift(day);
+  }
+  return beginMode('career', day, saved.phase === 'start' ? { shiftHours: saved.shiftHours } : {});
+}
+
+function importCareer(snapshot) {
+  const text = window.PLCareerSave.exportBackup(snapshot);
+  if (!text) return { ok: false, error: 'Il file non è un backup Carriera valido.' };
+  const saved = window.PLCareerSave.parseBackup(text).snapshot;
+  if (careerCheckpoint && typeof window.confirm === 'function' &&
+      !window.confirm('Importare questa Carriera? Il salvataggio attuale sarà sostituito. Esporta prima una copia se vuoi conservarlo.')) {
+    return { ok: false, error: 'Importazione annullata. La Carriera attuale è stata conservata.' };
+  }
+  if (!window.PLCareerSave.save(saved)) {
+    return { ok: false, error: 'Il browser non consente di salvare la Carriera importata. Il salvataggio attuale è stato conservato.' };
+  }
+  careerCheckpoint = saved;
+  showModes();
+  document.getElementById('introBack').hidden = true;
+  return { ok: true };
+}
+
+function showCareerWelcome(newCareer = false) {
+  modePicking = true;
+  return window.PLCareerWelcome.open({ newCareer });
+}
+window.PLCareerWelcome.bind({
+  enter: () => {
+    if (careerCheckpoint && typeof window.confirm === 'function' &&
+        !window.confirm('Iniziare una nuova Carriera? Il giorno e la crescita salvati saranno sostituiti.')) return false;
+    return selectMode('career');
+  },
+});
+window.PLGameModes.bind({
+  choose: mode => {
+    if (mode === 'career') showCareerWelcome(true);
+    else selectMode(mode);
+  },
+  welcome: () => showCareerWelcome(),
+  resume: resumeCareer,
+  import: importCareer,
+});
+function resetSimulationClock(speed) {
+  game.speed = speed; acc = 0;
+  document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', Number(b.dataset.s) === speed));
+}
+observation = window.PLObservationEngine.create({getGame: () => game, getMode: () => chosenMode, isModePicking: () => modePicking,
+  TEAM, TIER, ROSTER, NEEDS, SKIN, HAIR, STAFF_SHIRT, BACK_DOOR, CREATIVE_HOMES, LEAD_HOMES, OPEN, LAST_ENTRY, LAST_APPT,
+  seedRandom, rand, pick, buildFloorRota, buildBarRota, slotProps, newDay, startDay, updatePanel, log, bump, resetClock: resetSimulationClock});
+window.PLObservationUI.bind(observation);
+if (chosenMode === 'observation') observation.enter();
+newDay(7);
+if (!window.autoCoach) { game.briefing = true; document.getElementById('brief').classList.remove('show'); }
+updatePanel();
+requestAnimationFrame(frame);
+// per i test: avanza la simulazione senza aspettare
+window.__sim = { step, startDay, newDay, selectMode, resumeCareer, importCareer, promoteCareer, showModes, closeModes,
+  observation, get mode() { return chosenMode; }, get playerMode() { return playerMode; }, get game() { return game; } };
+// The camera reads the floor; it never changes a visit or a save.
+window.PLFloorView = {
+  player: () => careerStarted && SPECIALIST_ON && !game.level && playerMode ? playerMode.player() : null,
+  snapshot: () => ({
+    layout: {width: WORLD_W, height: WORLD_H, tables: TABLES, support: SUPPORT, walls: WALLS, trees: TREES,
+      stools: STOOLS, screen: SCREEN, door: DOOR, backDoor: BACK_DOOR, express: EXPRESS,
+      pointProduct: POINT_IN, pointGenius: POINT_GB},
+    customers: game.customers, staff: game.staff, player: window.PLFloorView.player(), selected: game.selected, time: game.time, speed: game.speed,
+    paused: !floorReady || game.speed === 0 || game.briefing || game.over || game.planning || modePicking || intro.on,
+  }),
+  select: hit => {
+    if (!hit) game.selected = null;
+    else if (hit.type === 'table') { const table = tableByName(hit.name); game.selected = table ? {isTable: true, table} : null; }
+    else game.selected = (hit.isStaff ? game.staff : game.customers).find(e => e.id === hit.id) || null;
+    updatePanel();
+  },
+  attach: renderer => { floorRenderer = renderer; },
+  setReady: ready => {
+    floorReady = Boolean(ready && floorRenderer);
+    acc = 0; last = performance.now();
+    if (floorReady) floorRenderer.resize();
+    return floorReady;
+  },
+  setView: view => { if (floorRenderer) floorRenderer.setView(view, window.PLFloorView.player()); },
+  stats: () => floorRenderer ? floorRenderer.getStats() : null,
+  get active() { return floorReady; },
+};

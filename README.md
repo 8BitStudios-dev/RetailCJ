@@ -68,15 +68,15 @@ Una nuova Carriera parte da Specialist con competenza **0 / 100**. Il percorso �
 
 Ruolo e competenza sono inclusi nei salvataggi e nei backup versione 2. I salvataggi e i file versione 1 vengono recuperati come Specialist, conservando la competenza precedente. La promozione crea subito un checkpoint; se il browser impedisce il salvataggio, un messaggio invita a esportare una copia.
 
-## Versione e aggiornamento
+## Interfaccia e struttura
 
-La versione corrente è **1.9.3**, visibile nel menu iniziale e nella barra del gioco. «Aggiorna app» ricarica il sito chiedendo una copia aggiornata. Durante un turno attivo richiede conferma, perché la Carriera riparte dal checkpoint salvato all’apertura; i salvataggi e i file di backup non vengono eliminati.
+RetailCJ 2.0.0 usa un unico floor 3D. I comandi di tempo, modalità e camera si trovano sopra la scena, insieme alle azioni dello Specialist e agli strumenti di Osservazione. Dati, squadra e dettaglio della selezione restano nel pannello laterale. Il menu iniziale non propone scelte grafiche e l’interfaccia non mostra numero di versione o pulsante di aggiornamento.
 
-La versione è dichiarata nella meta `application-version` di `index.html` e nei parametri `v` dei file JavaScript e CSS. A ogni rilascio aggiornare entrambi: il ricaricamento usa un URL nuovo e i file della nuova versione non riutilizzano la copia precedente nella cache.
+`index.html` contiene la schermata e carica `game.js`, che conserva la simulazione e i salvataggi. `floor-view.js` avvia il renderer e gestisce camera, caricamento e recupero dagli errori. `renderer-3d.js` costruisce la scena; `floor-view.css` gestisce il layout. Il vecchio renderer del floor in 2D, i suoi asset grafici e il sistema di aggiornamento manuale sono stati rimossi. La versione rimane nei metadati e nei parametri degli asset per la cache.
 
 ## Laboratorio Osservazione
 
-La versione 1.9.3 permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
+Il laboratorio permette di configurare sei flussi indipendenti: vendita, accessori assistiti, Express, Support con appuntamento, Support senza appuntamento e visite libere. I moltiplicatori vanno da 0 a 3; modificare il personale non cambia i clienti inizialmente previsti. Gli appuntamenti sono indipendenti dalla capacità del Bar: una squadra insufficiente produce attese invece di ridurre artificialmente la domanda.
 
 Il personale del turno è configurabile per tutti i dieci ruoli, fino a 80 persone complessive. La copertura include Point ingresso, Point Support ed Express; un solo tecnico al Bar copre il Point e non aumenta la capacità di riparazione. Si possono cambiare disposizione, priorità, competenza iniziale, motivazione, stress, meteo, picco pomeridiano, complessità delle visite, pazienza, mancate presentazioni e tempi Operations. Con zero Operations gli ordini restano in attesa.
 
@@ -96,13 +96,11 @@ In Osservazione, «Accessori Express dal backstage» modifica la quota da 0 a 10
 
 Dopo l’acquisto il cliente percorre il floor fino alla porta. L’arrivo alla cassa non viene più confuso con l’arrivo all’uscita: il cliente resta visibile lungo il tragitto e viene rimosso soltanto alla fine. La stessa correzione vale per gli altri percorsi conclusi dal cliente. Chi aspetta il runner mantiene la propria attesa e il suo ordine.
 
-## Viste 2D e 3D nello stesso sito
+## Floor 3D
 
-RetailCJ 1.9.3 integra la pianta 2D e il floor 3D nello stesso indirizzo. Il selettore 2D / 3D è disponibile nel menu iniziale e durante il gioco, in Carriera e in Osservazione. Le due viste leggono la stessa simulazione: cambiare vista non riavvia il turno e conserva clienti, code, assegnazioni, consegne e statistiche.
+Il 3D si carica automaticamente in Carriera e Osservazione, con Three.js 0.186.1 incluso in `vendor/` e relativa licenza MIT. Panoramica e Dall’alto mostrano il floor completo. Express, Point Product all’ingresso e Point Genius Bar impostano i tre focus, includendo la relativa fila. Trascinamento, rotella e due dita controllano camera e zoom. La camera legge la simulazione e non cambia visite o salvataggi.
 
-La prima apertura usa il 2D; la scelta viene ricordata nella sola preferenza `plgame.view`. Carriera, modalità, livelli e backup conservano i namespace e il formato originali. Il 3D viene caricato soltanto su richiesta, con Three.js 0.186.1 incluso in `vendor/` e relativa licenza MIT. Panoramica e Dall’alto mostrano il floor completo. Express, Point Product all’ingresso e Point Genius Bar impostano i tre focus, includendo la relativa fila e adattandosi al formato dello schermo; trascinamento, rotella e due dita controllano camera e zoom.
-
-Se il browser non supporta WebGL 2, il caricamento fallisce o il contesto grafico si perde, il gioco resta utilizzabile in 2D con la stessa giornata. Il renderer modifica solo i propri oggetti grafici. I test verificano continuità della Carriera, caricamento asincrono, fallback e selezione nella scena con Three.js reale; l’aspetto e la fluidità richiedono una verifica nel browser.
+La precedente preferenza `plgame.view` non viene più letta o scritta; i salvataggi della Carriera, delle modalità e dei livelli mantengono gli stessi formati. Durante il caricamento o un errore grafico il ciclo del gioco resta in pausa, senza recuperare tempo nascosto al rientro. Un errore di caricamento permette di riprovare; la perdita del contesto propone di riaprire il gioco. WebGL 2 è necessario per il floor. I test verificano avvio, errori, continuità dello stato, selezione e camera con la matematica Three.js reale.
 
 ## Express e scenari estremi
 
@@ -112,6 +110,6 @@ Durante il cambio ruoli, Point ed Express continuano a servire finché il sostit
 
 ## Icona Piazza Liberty e camera Carriera
 
-RetailCJ 1.9.3 usa Piazza Liberty in pixel art per la favicon e l’icona della schermata Home. I PNG si trovano in `assets/piazza-liberty-icon.png` (512), `assets/piazza-liberty-icon-180.png` e `assets/piazza-liberty-icon-32.png`.
+RetailCJ usa Piazza Liberty in pixel art per la favicon e l’icona della schermata Home. I PNG si trovano in `assets/piazza-liberty-icon.png` (512), `assets/piazza-liberty-icon-180.png` e `assets/piazza-liberty-icon-32.png`.
 
-Quando avvii o riprendi una Carriera in 3D, la camera si centra sul tuo personaggio e lo segue durante gli spostamenti. «Seguimi» e «Mostrami sul floor» riattivano il seguito dopo aver scelto una vista del floor. Rotazione e zoom restano disponibili. Durante una pausa, quando il personaggio è nascosto, la camera mantiene l’ultima posizione e riprende al rientro. Osservazione usa Panoramica e i focus dei punti; la vista 2D mantiene la sua pianta.
+Quando avvii o riprendi una Carriera in 3D, la camera si centra sul tuo personaggio e lo segue durante gli spostamenti. «Seguimi» e «Mostrami sul floor» riattivano il seguito dopo aver scelto una vista del floor. Rotazione e zoom restano disponibili. Durante una pausa, quando il personaggio è nascosto, la camera mantiene l’ultima posizione e riprende al rientro. Osservazione usa Panoramica e i focus dei punti.

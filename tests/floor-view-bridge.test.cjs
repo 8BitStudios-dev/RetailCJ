@@ -76,40 +76,39 @@ function stubRenderer() {
   };
 }
 
-test('switching 2D and 3D views during a career visit preserves time, paths, assignments, queues, stats, and saves', () => {
+test('renderer attachment, readiness changes, and camera views never change a frozen active visit', () => {
   const env = activeVisit();
   const before = capture(env);
   const api = env.context.PLFloorView;
   const renderer = stubRenderer();
 
   api.attach(renderer);
-  assert.equal(api.active, false, 'Attaching a renderer does not select a view');
-  assert.equal(api.setMode(true), true);
-  api.setView('floor');
+  assert.equal(api.active, false, 'Attaching a renderer alone cannot start the floor');
+  assert.equal(api.setReady(true), true);
+  api.setView('overview');
   env.evaluate('render(0.1)');
   assert.equal(renderer.calls.frames.length, 1);
   const frame = renderer.calls.frames[0];
   assert.equal(frame.snapshot.customers, before.customers);
   assert.equal(frame.snapshot.staff, before.staff);
   assert.equal(frame.snapshot.time, before.game.time);
-  assert.equal(frame.snapshot.player, before.player, 'A renderer receives the current player without changing the visit');
+  assert.equal(frame.snapshot.player, before.player);
   assert.equal(frame.dt, 0.1);
   assertVisitUnchanged(env, before);
 
-  assert.equal(api.setMode(false), false);
+  assert.equal(api.setReady(false), false);
   const fills = env.counters.fills;
   env.evaluate('render(0.2)');
-  assert.ok(env.counters.fills > fills, 'The existing 2D renderer actually draws the same floor');
+  assert.equal(env.counters.fills, fills, 'An unavailable 3D renderer has no hidden 2D fallback');
   assert.equal(renderer.calls.frames.length, 1);
   assertVisitUnchanged(env, before);
 
-  assert.equal(api.setMode(true), true);
+  assert.equal(api.setReady(true), true);
   api.setView('top');
   env.evaluate('render(0.3)');
   assert.equal(renderer.calls.frames.length, 2);
   assert.equal(renderer.calls.frames[1].dt, 0.3);
-  assert.deepEqual(renderer.calls.views, ['floor', 'top']);
-  assert.equal(renderer.calls.resize, 2);
+  assert.deepEqual(renderer.calls.views, ['overview', 'top']);
   assert.deepEqual(plain(api.stats()), {frames: 2});
   assertVisitUnchanged(env, before);
 });
@@ -182,7 +181,7 @@ test('selecting the personal camera passes the exact current player while preser
   const api = env.context.PLFloorView;
   const renderer = stubRenderer();
   api.attach(renderer);
-  api.setMode(true);
+  api.setReady(true);
   api.setView('player');
   assert.equal(renderer.calls.views.at(-1), 'player');
   assert.equal(renderer.calls.entities.at(-1), before.player);

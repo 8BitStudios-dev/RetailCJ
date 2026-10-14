@@ -482,7 +482,8 @@ test('a whole Specialist shift reaches 14:00 without old leader, role or checkpo
   assert.ok(env.view().stats.served > 0);
   for (const id of ['moment', 'plan', 'check']) assert.equal(env.get(id).classList.contains('show'), false);
   env.evaluate('render(); updatePanel()');
-  assert.ok(env.counters.images > 0);
+  assert.equal(env.context.PLFloorView.snapshot().player, env.mode().player());
+  assert.equal(env.view().isOver, true);
 });
 
 test('a new day clears personal counters/history while retaining identity and learned stats', () => {
@@ -529,9 +530,9 @@ test('pause returns after fifteen minutes and enforces the existing one-hour coo
 test('the visible Next control follows the actual queue and busy state', () => {
   const env = ready();
   env.evaluate('updatePanel()');
-  const panel = env.get('playerPanel');
-  assert.ok(panel);
-  const next = panel.querySelector('button[data-specialist-action="next"]');
+  const commands = env.get('playerCommands');
+  assert.ok(commands);
+  const next = commands.querySelector('button[data-specialist-action="next"]');
   assert.ok(next);
   assert.equal(next.disabled, true);
   const c = customer(env);

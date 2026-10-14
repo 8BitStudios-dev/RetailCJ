@@ -1,0 +1,49 @@
+.app { display:grid; grid-template-columns:minmax(0,1fr) 340px; grid-template-areas:"controls controls" "stage side"; gap:14px; width:100%; max-width:1800px; margin:0 auto; padding:16px; align-items:start; }
+.controlsStack { grid-area:controls; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.hud { min-width:0; }
+.hudRow { flex-wrap:wrap; gap:12px 20px; }
+.storeClock { min-width:160px; }
+.hud .modeBar { margin:0 0 0 auto; gap:12px; }
+.hud .npsRow:empty { display:none; }
+.floorCameraBar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+.floorCameraBar>div { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.floorCameraBar button { min-height:36px; border-radius:7px; padding:6px 12px; font-size:12px; }
+.floorCameraBar>span { font-size:10px; color:var(--muted); }
+.floorStatus { margin:8px 0 0; font-size:12px; line-height:1.5; color:#c2d5ea; }
+.floorStatus:empty { display:none; }
+#floorRetry { margin-top:8px; }
+.stage { grid-area:stage; position:relative; min-width:0; }
+.scroller { width:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#d9e4e8; }
+#floor3d { display:block; width:100%; height:clamp(420px,calc(100svh - 230px),950px); image-rendering:auto; cursor:grab; touch-action:none; -webkit-tap-highlight-color:transparent; }
+#floor3d:active { cursor:grabbing; }
+#floor3d:focus-visible { outline:3px solid #78bdde; outline-offset:-4px; }
+.side { grid-area:side; min-width:0; display:flex; flex-direction:column; gap:12px; }
+.commandBar { display:flex; align-items:center; flex-wrap:wrap; gap:10px 20px; border-color:#5274a2; }
+.commandBar .playerQueue { margin:0; min-width:140px; }
+.commandBar .playerControls { display:flex; align-items:center; flex-wrap:wrap; flex:1; gap:8px; }
+.commandBar .playerNext { width:auto; flex:1; min-width:190px; }
+.commandBar .playerSecondaryActions { display:flex; flex-wrap:wrap; gap:8px; margin:0; }
+.commandBar button { min-height:40px; padding:8px 14px; font-size:12px; }
+.observationCommands { display:flex; flex-wrap:wrap; align-items:start; gap:0 20px; }
+.observationCommands>.observationDetails { flex:1 1 200px; margin:0; min-width:0; }
+.observationCommands>.observationDetails[open] { flex-basis:100%; }
+.observationCommands .observationStaffGrid { grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); }
+#floor3d[hidden],#cameraControls[hidden],#floorRetry[hidden],#playerCommands[hidden],#observationControls[hidden] { display:none; }
+@media(max-width:1000px) and (min-width:761px) { .app { grid-template-columns:minmax(0,1fr) 290px; padding:12px; gap:12px; } }
+@media(max-width:760px) {
+  .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"controls" "stage" "side"; padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); gap:10px; }
+  .controlsStack { gap:8px; }
+  .hud { padding:10px; }
+  .hudRow { gap:10px; }
+  .storeClock { min-width:0; flex:1; }
+  .hud .modeBar { width:100%; margin:0; }
+  .floorCameraBar button { min-height:36px; padding:6px 8px; font-size:11px; }
+  .floorCameraBar>span { width:100%; }
+  #floor3d { height:clamp(360px,60svh,650px); }
+  .commandBar { gap:8px; padding:10px; }
+  .commandBar .playerQueue { min-width:0; width:100%; }
+  .commandBar .playerControls,.commandBar .playerSecondaryActions { width:100%; }
+  .commandBar .playerSecondaryActions button { flex:1; }
+  .commandBar button { min-height:44px; }
+  .observationCommands { padding:8px 12px; }
+}

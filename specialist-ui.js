@@ -42,10 +42,12 @@
 
   function ensure() {
     const root = document.getElementById('playerPanel');
-    if (!root) return null;
+    const commands = document.getElementById('playerCommands');
+    if (!root || !commands) return null;
     if (refs && refs.root === root) return refs;
 
     root.replaceChildren();
+    commands.replaceChildren();
     root.classList.add('playerPanel');
     root.setAttribute('aria-label', 'Il tuo turno da Specialist');
     const header = node('div', 'playerHeader', root);
@@ -91,8 +93,8 @@
     promote.id = 'careerPromote';
     promote.setAttribute('aria-describedby', 'careerPromotionHint');
 
-    const queue = node('div', 'playerQueue', root);
-    const controls = node('div', 'playerControls', root);
+    const queue = node('div', 'playerQueue', commands);
+    const controls = node('div', 'playerControls', commands);
     const next = button(controls, 'next', 'Segui il prossimo cliente', 'playerNext on');
     const secondary = node('div', 'playerSecondaryActions', controls);
     const focus = button(secondary, 'focus', 'Mostrami sul floor');
@@ -148,15 +150,17 @@
       return { row, title, time, outcome };
     });
 
-    refs = { root, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
+    refs = { root, commands, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
-    root.addEventListener('click', event => {
-      const control = event.target.closest('button[data-specialist-action]');
-      if (!control || !root.contains(control) || control.disabled) return;
-      const action = actions[control.dataset.specialistAction];
-      if (typeof action === 'function') action();
-    });
+    for (const container of [root, commands]) {
+      container.addEventListener('click', event => {
+        const control = event.target.closest('button[data-specialist-action]');
+        if (!control || !container.contains(control) || control.disabled) return;
+        const action = actions[control.dataset.specialistAction];
+        if (typeof action === 'function') action();
+      });
+    }
     return refs;
   }
 
@@ -164,6 +168,7 @@
     const r = ensure();
     if (!r || !view) return;
     r.root.hidden = !view.enabled;
+    r.commands.hidden = !view.enabled;
     if (!view.enabled) return;
 
     setText(r.name, view.name || 'Tu');

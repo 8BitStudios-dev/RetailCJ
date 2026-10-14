@@ -12,12 +12,13 @@ const gameDirectory = fs.existsSync(path.join(projectDirectory, 'index.html'))
   ? projectDirectory
   : path.join(projectDirectory, 'dist');
 
-// This harness executes the actual page and modules. Canvas drawing is checked
-// for valid arguments; gameplay, state transitions and dispatch are not mocked.
+// This harness executes the actual page and classic modules. WebGL is absent
+// unless explicitly enabled; simulation transitions and dispatch are not mocked.
 function makeEnvironment(options = {}) {
   const html = fs.readFileSync(path.join(gameDirectory, 'index.html'), 'utf8');
   const elements = new Map();
-  const counters = { surfaces: 0, fills: 0, images: 0, animationRequests: 0 };
+  const counters = { surfaces: 0, fills: 0, images: 0, animationRequests: 0, reloads: 0 };
+  const animationCallbacks = [];
   const documentListeners = new Map();
   const windowListeners = new Map();
   const objectURLs = new Map();
@@ -254,6 +255,7 @@ function makeEnvironment(options = {}) {
   }
   const location = {
     href: options.locationHref ?? 'http://retailcj.test/?foo=bar#game',
+    reload() { counters.reloads++; },
     replace(value) {
       const url = String(value);
       navigationAttempts.push(url);
@@ -266,7 +268,7 @@ function makeEnvironment(options = {}) {
     Blob, TextEncoder, TextDecoder,
     URL: BrowserURL, location,
     performance: { now: () => 0 },
-    requestAnimationFrame() { counters.animationRequests++; },
+    requestAnimationFrame(callback) { counters.animationRequests++; animationCallbacks.push(callback); },
     matchMedia: () => ({ matches: false }),
     localStorage: {
       getItem: storageOperation('read', key => storage.get(String(key)) ?? null),
@@ -295,9 +297,9 @@ function makeEnvironment(options = {}) {
       const source = path.join(gameDirectory, file);
       if (!fs.existsSync(source)) throw new Error('Specialist integration is not ready: missing ' + file);
       let script = fs.readFileSync(source, 'utf8');
-      // Only these tests substitute the lazy module boundary. The production
-      // controller and its promises, preference handling and DOM remain real.
-      if (file === 'view-mode.js' && options.importFloorRenderer) {
+      // Only these tests substitute the module boundary. The production floor
+      // controller, startup promises, recovery and DOM remain real.
+      if (file === 'floor-view.js' && options.importFloorRenderer) {
         script = script.replace(/import\((['"])\.\/renderer-3d\.js[^'"]*\1\)/g,
           specifier => '__importFloorRenderer(' + specifier.slice(7, -1) + ')');
       }
@@ -312,6 +314,11 @@ function makeEnvironment(options = {}) {
     html, context, counters, evaluate, storage, downloads, objectURLs, revokedURLs,
     navigations, navigationAttempts, storageCalls,
     get: id => elements.get(id) || null,
+    runFrame(timestamp) {
+      const callback = animationCallbacks.shift();
+      assert.equal(typeof callback, 'function', 'The page has requested its next animation frame');
+      callback(timestamp);
+    },
     mode: () => evaluate('playerMode'),
     game: () => evaluate('game'),
     view: () => JSON.parse(JSON.stringify(evaluate('playerMode.view()'))),

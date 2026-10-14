@@ -22,7 +22,7 @@ function color(value, fallback) {
   try { return new THREE.Color(value || fallback); } catch { return new THREE.Color(fallback); }
 }
 
-export class BetaFloorRenderer {
+export class FloorRenderer {
   constructor({ canvas, onSelect = () => {} }) {
     this.canvas = canvas;
     this.onSelect = onSelect;

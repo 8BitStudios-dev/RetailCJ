@@ -34,9 +34,9 @@ const customer = extra => ({id: 'C0', isStaff: false, x: 700, y: 410, facing: 'd
 const snapshot = extra => ({customers: [], staff: [], selected: null, time: 600, paused: false, ...extra});
 
 async function fixture({width = 850, height = 600, world = false} = {}) {
-  const [THREE, {BetaFloorRenderer}] = await modules;
+  const [THREE, {FloorRenderer}] = await modules;
   global.document = {createElement: type => {assert.equal(type, 'canvas'); return canvas();}};
-  const view = Object.create(BetaFloorRenderer.prototype);
+  const view = Object.create(FloorRenderer.prototype);
   const camera = new THREE.OrthographicCamera(-12, 12, 12, -12, 0.1, 120);
   Object.assign(view, {canvas: canvas(width, height), camera, scene: new THREE.Scene(), layout: null,
     geometries: new Set(), materials: new Map(), textures: new Set(), actorGeometry: new Map(), armGeometry: new Map(), legGeometry: new Map(),

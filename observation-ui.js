@@ -187,8 +187,7 @@
     const phases = node('dl', 'observationPhaseList', journeyDetails);
     const secondaryMetrics = node('p', 'observationSecondaryMetrics', journeyDetails);
 
-    const compare = node('section', 'observationComparison', root);
-    node('h3', '', compare, 'Confronta A / B');
+    const compare = details(root, 'Confronta A / B', 'observationDetails observationComparison');
     const referenceInfo = node('p', 'observationHint', compare);
     const compareResults = node('dl', 'observationCompareResults', compare);
     const compareButtons = node('div', 'observationButtonRow', compare);
@@ -279,8 +278,10 @@
     const tools = [header, intro, stamp, configure, live];
     const remaining = Array.from(root.children).filter(child => !tools.includes(child));
     root.replaceChildren.apply(root, tools.concat(remaining));
+    const controls = document.getElementById('observationControls');
+    if (controls) controls.replaceChildren(configure, live, compare);
 
-    refs = { root, state, stamp, cards, totals, channelRows, phases, secondaryMetrics,
+    refs = { root, controls, state, stamp, cards, totals, channelRows, phases, secondaryMetrics,
       referenceInfo, compareResults, capture, clear, fields, draftState, staffPreview, liveButtons, liveTier,
       capacity, notice, presetSelect, presetDescription };
     return refs;
@@ -319,6 +320,7 @@
     if (!r || !view) return;
     lastView = view;
     r.root.hidden = !view.active || Boolean(view.modePicking);
+    if (r.controls) r.controls.hidden = r.root.hidden;
     if (r.root.hidden) return;
     const nextConfig = normalized(view.config || model().defaults || FALLBACK_CONFIG);
     const nextKey = JSON.stringify(nextConfig);
