@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildTableFrame, buildTodayStool, buildBarStools } from './store-furniture.js?v=2.2.0';
-import { buildProductDisplay } from './store-displays.js?v=2.2.0';
+import { buildProductDisplay } from './store-displays.js?v=2.2.1';
 
 // The view consumes the existing floor simulation. It owns no game state and
 // never changes an entity, a queue slot, or a saved career.

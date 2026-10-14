@@ -246,7 +246,8 @@ export function buildProductDisplay(view, parent, table, { width, length, top })
   assets(view);
   const product = table.kind === 'support' ? 'support' : table.product || 'support';
   const rows = [-1, 1];
-  const positions = [-length * 0.30, 0, length * 0.30];
+  const spacing = product === 'support' ? 0.12 : 0.30;
+  const positions = [-length * spacing, 0, length * spacing];
   if (product === 'watch') {
     watchDisplays(view, parent, width, length, top);
     return;
@@ -262,7 +263,7 @@ export function buildProductDisplay(view, parent, table, { width, length, top })
     return;
   }
   for (const side of rows) {
-    const x = side * width * 0.27;
+    const x = side * width * (product === 'support' ? 0.125 : 0.27);
     const yaw = side * Math.PI / 2;
     positions.forEach((z, index) => {
       const variant = index + (side > 0 ? 3 : 0);
@@ -273,12 +274,13 @@ export function buildProductDisplay(view, parent, table, { width, length, top })
         tablet(view, parent, x, z, top, yaw, variant, { pencil: index === 1 });
         priceDisc(view, parent, side * width * 0.41, z + length * 0.10, top);
       } else if (product === 'support') {
-        // The central power rail belongs to the support table furniture.
-        phoneDock(view, parent, side * width * 0.25, z, top, yaw, 1, variant);
+        // Cluster around the cable slit, between the two power modules;
+        // the outer tabletop stays clear for support conversations.
+        phoneDock(view, parent, x, z, top, yaw, 1, variant);
       } else {
         phoneDock(view, parent, x, z, top, yaw, 3, variant);
       }
-      cable(view, parent, side * width * 0.18, z, top);
+      cable(view, parent, product === 'support' ? x : side * width * 0.18, z, top);
     });
   }
 }
