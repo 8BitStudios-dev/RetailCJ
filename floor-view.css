@@ -5,6 +5,7 @@
 .storeClock { min-width:160px; }
 .hud .modeBar { margin:0 0 0 auto; gap:12px; }
 .hud .npsRow:empty { display:none; }
+.modeLabelShort,.playerActionShort { display:none; }
 .floorViewport { min-width:0; }
 .floorCameraBar { display:flex; align-items:center; gap:4px; margin-top:6px; overflow-x:auto; white-space:nowrap; scrollbar-width:thin; }
 .floorCameraBar>div { display:flex; flex:none; gap:4px; }
@@ -61,7 +62,27 @@
   .cameraLabelFull { display:none; }
   .cameraLabelShort { display:inline; }
   #floor3d { height:clamp(360px,60svh,650px); }
-  .careerLayout .app,.careerLayout.floorIsExpanded .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"controls" "stage" "interaction" "side"; }
+  .careerLayout .app,.careerLayout.floorIsExpanded .app { grid-template-columns:minmax(0,1fr); grid-template-areas:"controls" "interaction" "stage" "side"; }
+  .careerLayout .controlsStack { position:sticky; top:max(6px,env(safe-area-inset-top)); z-index:4; gap:6px; }
+  .careerLayout .hud { padding:7px 8px; border-radius:8px; }
+  .careerLayout .hudRow { flex-wrap:nowrap; gap:6px; }
+  .careerLayout .storeClock { flex:1; min-width:0; }
+  .careerLayout .clock { font-size:16px; letter-spacing:0; }
+  .careerLayout #date { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; line-height:1.5; }
+  .careerLayout #speed { flex:none; gap:3px; }
+  .careerLayout #speed button { min-height:36px; min-width:32px; padding:0 5px; font-size:11px; }
+  .careerLayout .hud .modeBar { flex:none; width:auto; margin:0; gap:0; }
+  .careerLayout #modeBadge,.careerLayout .hud .npsRow { display:none; }
+  .careerLayout #changeMode { min-height:36px; padding:4px 8px; font-size:11px; }
+  .careerLayout .modeLabelFull,.careerLayout .playerActionFull { display:none; }
+  .careerLayout .modeLabelShort,.careerLayout .playerActionShort { display:inline; }
+  .careerLayout .commandBar { padding:7px 8px; gap:4px; }
+  .careerLayout .commandBar .playerQueue { font-size:10px; line-height:1.4; }
+  .careerLayout .commandBar .playerControls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; }
+  .careerLayout .commandBar .playerNext { min-width:0; width:100%; }
+  .careerLayout .commandBar .playerSecondaryActions { width:auto; flex-wrap:nowrap; gap:5px; }
+  .careerLayout .commandBar button { min-height:40px; padding:5px 8px; font-size:11px; }
+  .careerLayout.careerChoosing #playerCommands { display:none; }
   .careerLayout #floor3d { height:clamp(180px,26svh,240px); }
   .floorExpanded #floor3d,.careerLayout .floorExpanded #floor3d { height:clamp(360px,65svh,700px); }
   .careerLayout .side { grid-template-columns:minmax(0,1fr); }

@@ -54,10 +54,12 @@
 .playerChoice:disabled { opacity: .62; cursor: default; }
 .playerChoice.isRecommended { border-color: #86b7fb; }
 .playerChoiceHeading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; min-width: 0; }
+.playerChoiceMeta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 3px; }
 .playerChoiceLabel { flex: 1 1 220px; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 .playerChoiceMinutes { flex: 0 0 auto; color: #c5d3e8; font-size: 11px; line-height: 1.45; white-space: nowrap; }
 .playerChoiceDetail { display: block; margin-top: 4px; color: #c6d0df; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
-.playerChoiceRecommendation { display: inline-block; margin-top: 6px; padding: 2px 5px; border-radius: 3px; background: #365477; color: #e5f0ff; font-size: 10px; line-height: 1.35; }
+.playerChoiceRecommendation { display: inline-block; padding: 2px 5px; border-radius: 3px; background: #365477; color: #e5f0ff; font-size: 10px; line-height: 1.35; }
+.playerRecommendationShort, .playerActionShort, .playerMobileDetails { display: none; }
 .playerChoiceFootnote { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .playerInteractionFeedback { margin-top: 12px; padding: 9px 10px; border: 1px solid #456357; border-radius: 5px; background: #253a31; color: #d4eadb; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .playerInteractionResult { margin-top: 14px; padding: 12px; border: 1px solid #6a8a77; border-radius: 6px; background: #253a31; }
@@ -112,4 +114,43 @@
   .playerChoiceHeading { gap: 4px 8px; }
   .playerChoiceLabel { flex-basis: 180px; }
   .playerChoiceMinutes { font-size: 10px; }
+  .playerPanel.isChoosing > .playerHeader,
+  .playerPanel.isChoosing > .playerStatus,
+  .playerPanel.isChoosing > .playerShift,
+  .playerPanel.isChoosing .playerCurrent > .playerDescription,
+  .playerPanel.isChoosing .playerCurrent > .playerState,
+  .playerPanel.isChoosing .playerCurrent > .playerStarted,
+  .playerPanel.isChoosing .playerInteraction > .playerSpeaker,
+  .playerPanel.isChoosing .playerInteraction > .playerCue,
+  .playerPanel.isChoosing .playerInteraction > .playerLeadHint,
+  .playerPanel.isChoosing .playerInteractionPhase,
+  .playerPanel.isChoosing .playerChoiceDetail,
+  .playerPanel.isChoosing .playerRecommendationFull { display: none; }
+  .playerPanel.isChoosing .playerCurrent { margin-top: 0; padding: 0; border: 0; background: transparent; }
+  .playerPanel.isChoosing .playerCurrentTitle { font-size: 13px; line-height: 1.4; }
+  .playerPanel.isChoosing .playerProgress { flex-wrap: nowrap; gap: 3px; margin-top: 7px; }
+  .playerPanel.isChoosing .playerStep { min-width: 0; padding: 3px 4px; font-size: 9px; line-height: 1.35; }
+  .playerPanel.isChoosing .playerInteraction { margin-top: 7px; padding-top: 7px; }
+  .playerPanel.isChoosing .playerInteractionHeader { justify-content: flex-end; }
+  .playerPanel.isChoosing .playerDecisionTimer { font-size: 10px; line-height: 1.3; }
+  .playerPanel.isChoosing .playerSpeech { margin-top: 7px; font-size: 15px; line-height: 1.4; }
+  .playerPanel.isChoosing .playerChoices { gap: 6px; margin-top: 10px; }
+  .playerPanel.isChoosing .playerChoice { min-height: 44px; padding: 8px 9px; }
+  .playerPanel.isChoosing .playerChoiceHeading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 7px; }
+  .playerPanel.isChoosing .playerChoiceLabel { font-size: 14px; line-height: 1.35; }
+  .playerPanel.isChoosing .playerChoiceMinutes { font-size: 10px; line-height: 1.4; }
+  .playerPanel.isChoosing .playerChoiceRecommendation { padding: 1px 4px; font-size: 9px; line-height: 1.3; }
+  .playerPanel.isChoosing .playerRecommendationShort { display: inline; }
+  .playerPanel.isChoosing .playerChoiceFootnote { margin-top: 7px; font-size: 10px; line-height: 1.4; }
+  .playerPanel.isChoosing .playerInteractionFeedback { margin-top: 7px; padding: 6px 8px; font-size: 12px; line-height: 1.4; }
+  .playerPanel.isChoosing .playerMobileDetails { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+  .playerMobileDetails summary { min-height: 32px; padding: 7px 0; color: #bdd5ff; cursor: pointer; }
+  .playerMobileDetails summary:focus-visible { outline: 2px solid #a8c8ff; outline-offset: 2px; }
+  .playerMobileDetails p { margin: 6px 0; }
+  .playerHelpLead { padding: 7px 9px; border-left: 2px solid #86b7fb; background: #27384f; color: #d8e8ff; }
+  .playerChoiceExplanations { margin: 8px 0; padding-left: 18px; }
+  .playerChoiceExplanations li + li { margin-top: 9px; }
+  .playerChoiceExplanations strong, .playerChoiceExplanations span { display: block; }
+  .playerChoiceExplanations strong { color: #d8e8ff; font-weight: 500; }
+  .playerChoiceExplanations span { margin-top: 3px; }
 }

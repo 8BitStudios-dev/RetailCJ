@@ -26,6 +26,10 @@
     return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
   }
 
+  function normalizedLine(value) {
+    return String(value || '').toLowerCase().replace(/[«»“”"'’]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
   function phaseIndex(value) {
     const key = String(value || '').toLowerCase().normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
@@ -99,6 +103,13 @@
     const secondary = node('div', 'playerSecondaryActions', controls);
     const focus = button(secondary, 'focus', 'Mostrami sul floor');
     const pause = button(secondary, 'pause', 'Pausa 15 min');
+    [[next, 'Segui il prossimo cliente', 'Prossimo cliente'], [focus, 'Mostrami sul floor', 'Seguimi'],
+      [pause, 'Pausa 15 min', 'Pausa']].forEach(([control, full, short]) => {
+      control.setAttribute('aria-label', full);
+      control.replaceChildren();
+      node('span', 'playerActionFull', control, full);
+      node('span', 'playerActionShort', control, short);
+    });
 
     const current = node('div', 'playerCurrent', root);
     const currentTitle = node('strong', 'playerCurrentTitle', current, 'Nessun cliente in corso');
@@ -111,6 +122,10 @@
       const stage = node('li', 'playerStep', progress, label);
       stage.title = STAGE_HINTS[i]; return stage;
     });
+    const feedback = node('div', 'playerInteractionFeedback', current);
+    feedback.hidden = true;
+    feedback.setAttribute('role', 'status');
+    feedback.setAttribute('aria-live', 'polite');
     const interaction = node('section', 'playerInteraction', current);
     interaction.hidden = true;
     interaction.setAttribute('aria-label', 'Interazione con il cliente');
@@ -132,9 +147,12 @@
       control.disabled = true;
       const heading = node('span', 'playerChoiceHeading', control);
       const label = node('strong', 'playerChoiceLabel', heading);
-      const minutes = node('span', 'playerChoiceMinutes', heading);
+      const meta = node('span', 'playerChoiceMeta', heading);
+      const minutes = node('span', 'playerChoiceMinutes', meta);
+      const recommendation = node('span', 'playerChoiceRecommendation', meta);
+      node('span', 'playerRecommendationFull', recommendation, 'Consiglio del Lead');
+      node('span', 'playerRecommendationShort', recommendation, 'Lead');
       const detail = node('span', 'playerChoiceDetail', control);
-      const recommendation = node('span', 'playerChoiceRecommendation', control, 'Consiglio del Lead');
       recommendation.hidden = true;
       control.addEventListener('keydown', event => {
         if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault();
@@ -143,10 +161,18 @@
     });
     const choiceFootnote = node('p', 'playerChoiceFootnote', interaction,
       'I minuti indicano il lavoro sul floor; leggere non consuma il turno.');
-    const feedback = node('div', 'playerInteractionFeedback', current);
-    feedback.hidden = true;
-    feedback.setAttribute('role', 'status');
-    feedback.setAttribute('aria-live', 'polite');
+    const choiceHelp = node('details', 'playerDecisionHelp playerMobileDetails', interaction);
+    choiceHelp.id = 'playerChoiceHelp';
+    node('summary', '', choiceHelp, 'Aiuto e dettagli');
+    const helpCue = node('p', 'playerHelpCue', choiceHelp);
+    const helpLead = node('p', 'playerHelpLead', choiceHelp);
+    const explanations = node('ol', 'playerChoiceExplanations', choiceHelp);
+    const explanationRows = Array.from({ length: 3 }, () => {
+      const item = node('li', '', explanations);
+      const label = node('strong', '', item);
+      const detail = node('span', '', item);
+      return { item, label, detail };
+    });
     const result = node('section', 'playerInteractionResult', current);
     result.hidden = true;
     result.setAttribute('aria-label', 'Risultato della conversazione');
@@ -155,6 +181,15 @@
     const resultFeedback = node('ul', 'playerResultFeedback', result);
     const resultRows = Array.from({ length: 2 }, () => node('li', '', resultFeedback));
     const visitHint = node('div', 'playerDescription', current, 'L’ascolto accompagna tutta la visita. Acquisto, servizi e Setup fanno parte del percorso.');
+    const visitDetails = node('details', 'playerVisitDetails playerMobileDetails', current);
+    visitDetails.id = 'playerVisitDetails';
+    node('summary', '', visitDetails, 'Dettagli visita');
+    const visitIdentity = node('p', '', visitDetails);
+    const visitStatus = node('p', '', visitDetails);
+    const visitShift = node('p', '', visitDetails);
+    const visitDescription = node('p', '', visitDetails);
+    const visitState = node('p', '', visitDetails);
+    const visitStarted = node('p', '', visitDetails);
 
     const metrics = node('div', 'playerMetrics', root);
     const stats = {};
@@ -196,7 +231,8 @@
     refs = { root, commands, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, interaction, interactionPhase, timer, speaker, speech, cue, leadHint, choiceRows, choiceFootnote, feedback,
-      result, resultTitle, resultMeta, resultRows, visitHint, submittedToken: null,
+      choiceHelp, helpCue, helpLead, explanationRows, visitDetails, visitIdentity, visitStatus, visitShift,
+      visitDescription, visitState, visitStarted, result, resultTitle, resultMeta, resultRows, visitHint, submittedToken: null,
       stats, extraStats, energy, queue, next, focus, pause, message, recent, historyRows };
     for (const container of [root, commands]) {
       container.addEventListener('click', event => {
@@ -229,6 +265,7 @@
     if (!r || !view) return;
     r.root.hidden = !view.enabled;
     r.commands.hidden = !view.enabled;
+    r.root.classList.toggle('isChoosing', Boolean(view.enabled && view.interaction));
     if (!view.enabled) return;
 
     setText(r.name, view.name || 'Tu');
@@ -294,6 +331,12 @@
     r.description.hidden = !r.description.textContent;
     r.state.hidden = !r.state.textContent;
     r.started.hidden = !r.started.textContent;
+    [[r.visitIdentity, r.name.textContent + ' · ' + r.role.textContent], [r.visitStatus, r.status.textContent],
+      [r.visitShift, r.shift.textContent], [r.visitDescription, r.description.textContent],
+      [r.visitState, r.state.textContent], [r.visitStarted, r.started.textContent]].forEach(([element, value]) => {
+      setText(element, value);
+      element.hidden = !element.textContent;
+    });
     r.progress.hidden = !active;
     const conversation = view.interaction;
     const currentPhase = active ? phaseIndex(conversation && conversation.phase || view.phase || active.stateLabel) : -1;
@@ -320,10 +363,14 @@
       r.speech.hidden = !r.speech.textContent;
       setText(r.cue, conversation.cue);
       r.cue.hidden = !r.cue.textContent;
+      setText(r.helpCue, conversation.cue);
+      r.helpCue.hidden = !r.helpCue.textContent;
       const hint = conversation.guided && conversation.hint
         ? String(conversation.hint).replace(/^(?:il\s+)?lead\s*[:—–-]\s*/i, '') : '';
       setText(r.leadHint, hint ? 'Il Lead: ' + hint : '');
       r.leadHint.hidden = !r.leadHint.textContent;
+      setText(r.helpLead, r.leadHint.textContent);
+      r.helpLead.hidden = !r.helpLead.textContent;
       const seconds = Number(conversation.secondsLeft);
       const hasTimer = conversation.secondsLeft !== null && conversation.secondsLeft !== undefined && Number.isFinite(seconds);
       r.timer.hidden = Boolean(conversation.complete);
@@ -345,10 +392,15 @@
         row.control.dataset.choiceToken = String(conversation.token || '');
         row.canChoose = Boolean(option) && !conversation.complete && view.interactionEnabled !== false;
         row.control.disabled = !row.canChoose || r.submittedToken === conversation.token;
+        const explanation = r.explanationRows[i];
+        explanation.item.hidden = !option;
         if (!option) return;
         setText(row.label, option.label);
         setText(row.detail, option.detail);
         row.detail.hidden = !row.detail.textContent;
+        setText(explanation.label, option.label);
+        setText(explanation.detail, option.detail);
+        explanation.detail.hidden = !explanation.detail.textContent;
         const duration = Number(option.minutes);
         const hasDuration = option.minutes !== undefined && option.minutes !== null && Number.isFinite(duration);
         setText(row.minutes, hasDuration ? Math.max(0, Math.round(duration * 10) / 10).toLocaleString('it-IT') + ' min di turno' : '');
@@ -356,7 +408,8 @@
         row.recommendation.hidden = !(conversation.guided && option.recommended);
         row.control.classList.toggle('isRecommended', Boolean(conversation.guided && option.recommended));
       });
-      setText(r.feedback, feedbackText(conversation.feedback));
+      const reply = feedbackText(conversation.feedback);
+      setText(r.feedback, normalizedLine(reply) === normalizedLine(conversation.speech) ? '' : reply);
     } else {
       r.choiceRows.forEach(row => { row.control.disabled = true; row.optionId = null; row.canChoose = false; });
       setText(r.feedback, view.lastInteraction && view.lastInteraction.reply || '');
@@ -397,7 +450,8 @@
     r.pause.disabled = !view.canPause || Boolean(view.isOver);
     r.focus.disabled = !view.enabled;
     setText(r.message, view.message);
-    r.message.hidden = !r.message.textContent || r.message.textContent === r.feedback.textContent;
+    r.message.hidden = !r.message.textContent || r.message.textContent === r.feedback.textContent
+      || Boolean(conversation && normalizedLine(r.message.textContent) === normalizedLine(conversation.speech));
 
     const recent = Array.isArray(view.history) ? view.history.slice(0, 3) : [];
     r.recent.hidden = recent.length === 0;

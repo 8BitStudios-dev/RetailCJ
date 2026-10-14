@@ -341,7 +341,7 @@ test('the HUD explains the three factors and preserves fractional competence wit
   assert.equal(badge.querySelector('b').textContent, '99,9');
   assert.equal(env.get('careerPromote').disabled, true);
   assert.match(env.get('playerLearning').textContent, /40\s*%/);
-  const details = panel.querySelector('details');
+  const details = panel.querySelector('.playerFactors');
   assert.ok(details);
   assert.match(details.querySelector('summary').textContent, /tre fattori/i);
 });

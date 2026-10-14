@@ -117,7 +117,7 @@ test('3D boots automatically and ignores an old 2D preference without changing p
     const saved = storage(view);
     const entries = [...saved];
     const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: specifier => {
-      imports++; assert.equal(specifier, './renderer-3d.js?v=2.1.0');
+      imports++; assert.equal(specifier, './renderer-3d.js?v=2.1.1');
       return Promise.resolve(fixture.module);
     }});
     assert.equal(await env.context.PLFloorViewUI.ready, true);
@@ -141,6 +141,11 @@ test('the page keeps game commands above the floor and its compact camera bar di
   const doc = env.context.document;
   assert.equal(doc.querySelectorAll('canvas').length, 1);
   assert.equal(env.get('floor3d').tagName, 'CANVAS');
+  const menu = env.get('changeMode');
+  assert.equal(menu.getAttribute('aria-label'), 'Cambia modalità');
+  assert.ok(menu.querySelector('.modeLabelFull'));
+  assert.ok(menu.querySelector('.modeLabelShort'));
+  assert.equal(menu.querySelector('.modeLabelShort').getAttribute('aria-hidden'), 'true');
   assert.equal(doc.querySelectorAll('[data-app-version], [data-app-update], [data-floor-mode]').length, 0);
   assert.equal(env.context.PLAppUpdate, undefined);
   assert.equal(env.context.PLGraphics, undefined);
@@ -151,7 +156,7 @@ test('the page keeps game commands above the floor and its compact camera bar di
   const assets = [...env.html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi)]
     .map(match => match[1]).filter(url => !/^(?:https?:)?\/\//.test(url));
   for (const asset of assets) {
-    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.1.0', asset);
+    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.1.1', asset);
     assert.equal(fs.existsSync(path.join(gameDirectory, asset.split('?')[0])), true, asset);
   }
   const floorPosition = env.html.indexOf('id="floor3d"');

@@ -103,6 +103,9 @@ test('menu guards and shift closure cannot apply a stale conversation or create 
   assert.equal(env.game().over, true);
   assert.equal(env.view().interaction, null);
   assert.equal(env.view().lastInteraction, null);
+  env.evaluate('updatePanel()');
+  assert.equal(env.context.document.body.classList.contains('careerChoosing'), false, 'An interrupted conversation cannot hide the game commands');
+  assert.equal(env.get('playerPanel').classList.contains('isChoosing'), false);
   assert.equal(env.view().stats.sales, 0);
   assert.equal(env.view().stats.served, 0);
   assert.equal(env.mode().chooseInteraction(a.id, q.token), false);
@@ -163,4 +166,140 @@ test('visible choice controls cannot advance the floor while its renderer is una
   buttons[0].click();
   assert.equal(env.game().time, time);
   assert.equal(env.view().interaction.token, token);
+});
+
+test('the choosing layout exists only for a pending career decision and releases the same Next and Pause controls afterward', async () => {
+  const boot = makeEnvironment();
+  assert.equal(boot.context.document.body.classList.contains('careerChoosing'), false);
+  const env = fixture({kind: 'help', graphics: true});
+  await env.context.PLFloorViewUI.ready;
+  env.evaluate('updatePanel()');
+  const body = env.context.document.body;
+  const panel = env.get('playerPanel');
+  const commands = env.get('playerCommands');
+  const next = commands.querySelector('[data-specialist-action="next"]');
+  const pause = commands.querySelector('[data-specialist-action="pause"]');
+  assert.ok(next && pause);
+  assert.equal(body.classList.contains('careerChoosing'), true);
+  assert.equal(panel.classList.contains('isChoosing'), true);
+  assert.equal(next.disabled, true, 'An unanswered conversation still owns this customer');
+
+  complete(env);
+  env.evaluate('updatePanel()');
+  assert.equal(env.context.bridgeClient.outcome, 'helped');
+  assert.equal(body.classList.contains('careerChoosing'), false);
+  assert.equal(panel.classList.contains('isChoosing'), false);
+  assert.equal(commands.querySelector('[data-specialist-action="next"]'), next);
+  assert.equal(commands.querySelector('[data-specialist-action="pause"]'), pause);
+  assert.equal(pause.disabled, false, 'Finishing the questions restores the normal break action');
+
+  env.evaluate(`
+    const mobileNextClient = spawnCustomer('help', {product: 'iphone', familiarity: 0, hurry: 0, mood: 80});
+    game.lineIn = game.lineIn.filter(c => c !== mobileNextClient);
+    const mobileNextSlot = SLOTS.find(s => !s.taken && s.table.product === 'help');
+    mobileNextSlot.taken = mobileNextClient; mobileNextClient.slot = mobileNextSlot;
+    mobileNextClient.x = mobileNextSlot.x; mobileNextClient.y = mobileNextSlot.y;
+    mobileNextClient.state = 'waiting'; mobileNextClient.path = []; mobileNextClient.wait = 0;
+    mobileNextClient.tQueue = game.time; mobileNextClient.patience = 1000;
+    window.mobileNextClient = mobileNextClient; updatePanel();
+  `);
+  assert.equal(next.disabled, false, 'The existing Next button can take a new waiting customer');
+  next.click();
+  assert.equal(env.mode().player().customer, env.context.mobileNextClient);
+  env.context.__sim.selectMode('observation');
+  assert.equal(body.classList.contains('careerChoosing'), false);
+  assert.equal(panel.classList.contains('isChoosing'), false);
+  assert.equal(panel.hidden, true);
+
+  const resting = fixture({kind: 'help', graphics: true});
+  await resting.context.PLFloorViewUI.ready;
+  complete(resting); resting.evaluate('updatePanel()');
+  const breakButton = resting.get('playerCommands').querySelector('[data-specialist-action="pause"]');
+  assert.equal(breakButton.disabled, false);
+  breakButton.click();
+  assert.equal(resting.mode().player().wantsBreak, true, 'The restored Pause button remains functional');
+  assert.equal(resting.context.document.body.classList.contains('careerChoosing'), false);
+});
+
+test('the three actual choices precede recoverable Lead guidance and visit details without discarding their content or open state', async () => {
+  const env = fixture({graphics: true});
+  await env.context.PLFloorViewUI.ready;
+  env.evaluate('updatePanel()');
+  const panel = env.get('playerPanel');
+  const interaction = panel.querySelector('.playerInteraction');
+  const choices = interaction.querySelector('.playerChoices');
+  const help = env.get('playerChoiceHelp');
+  const details = env.get('playerVisitDetails');
+  assert.equal(choices.querySelectorAll('.playerChoice').length, 3);
+  assert.equal(help.tagName, 'DETAILS');
+  assert.equal(details.tagName, 'DETAILS');
+  assert.equal(help.querySelector('summary').textContent, 'Aiuto e dettagli');
+  assert.equal(details.querySelector('summary').textContent, 'Dettagli visita');
+  assert.ok(interaction.children.indexOf(help) > interaction.children.indexOf(choices), 'Guidance follows the actions in document order');
+  assert.ok(panel.querySelector('.playerCurrent').children.indexOf(details) > panel.querySelector('.playerCurrent').children.indexOf(interaction));
+  assert.equal(help.open, false);
+  assert.equal(details.open, false);
+  assert.ok(help.querySelector('.playerHelpLead').textContent.startsWith('Il Lead: '));
+  assert.equal(help.querySelector('.playerHelpCue').textContent, env.view().interaction.cue);
+  const explanations = help.querySelectorAll('li');
+  assert.equal(explanations.length, 3);
+  for (const [index, option] of env.view().interaction.options.entries()) {
+    assert.equal(explanations[index].querySelector('strong').textContent, option.label);
+    assert.equal(explanations[index].querySelector('span').textContent, option.detail);
+  }
+  assert.ok(details.querySelectorAll('p').some(node => node.textContent.includes(env.view().name + ' · ' + env.view().role)));
+  assert.ok(details.querySelectorAll('p').some(node => node.textContent.includes(env.view().active.description)));
+
+  // Native <details> owns its disclosure state. Rendering and a new question
+  // must leave the user's chosen open state intact.
+  help.open = true; details.open = true;
+  const token = env.view().interaction.token;
+  env.evaluate('updatePanel(); updatePanel()');
+  assert.equal(env.view().interaction.token, token);
+  assert.equal(help.open, true); assert.equal(details.open, true);
+  assert.equal(chooseGuided(env), true);
+  env.evaluate('updatePanel()');
+  assert.equal(env.get('playerChoiceHelp'), help);
+  assert.equal(env.get('playerVisitDetails'), details);
+  assert.equal(help.open, true); assert.equal(details.open, true);
+  assert.equal(env.view().interaction.phase, 'probe');
+  assert.ok(panel.querySelector('.playerInteractionFeedback').textContent.length > 0);
+});
+
+test('countdown refreshes retain button identity and tokens, while repeated keyboard and double clicks cannot choose a second phase', async () => {
+  const env = fixture({tier: 'E', graphics: true});
+  await env.context.PLFloorViewUI.ready;
+  env.evaluate('updatePanel()');
+  const panel = env.get('playerPanel');
+  const buttons = panel.querySelectorAll('.playerChoice');
+  const before = buttons.map(button => ({id: button.dataset.specialistChoice, token: button.dataset.choiceToken}));
+  const time = env.game().time;
+  const seconds = env.view().interaction.secondsLeft;
+  for (let frame = 1; frame <= 15; frame++) env.runFrame(frame * 100);
+  assert.equal(env.game().time, time, 'Reading the compact choices does not consume the shift');
+  assert.ok(env.view().interaction.secondsLeft < seconds);
+  for (const [index, button] of buttons.entries()) {
+    assert.equal(panel.querySelectorAll('.playerChoice')[index], button);
+    assert.equal(button.dataset.specialistChoice, before[index].id);
+    assert.equal(button.dataset.choiceToken, before[index].token);
+    assert.equal(button.disabled, false);
+  }
+  const question = env.view().interaction;
+  const useful = question.options.find(option => option.id.endsWith('-welcome'));
+  const button = buttons.find(item => item.dataset.specialistChoice === useful.id);
+  for (const key of ['Enter', ' ']) {
+    let prevented = false;
+    button.dispatch('keydown', {key, repeat: true, preventDefault() { prevented = true; }});
+    assert.equal(prevented, true, 'Holding ' + key + ' cannot auto-submit later questions');
+  }
+  assert.equal(env.view().interaction.token, question.token);
+  button.dispatch('click', {detail: 1});
+  assert.equal(env.view().interaction.phase, 'probe');
+  const after = env.game().time, token = env.view().interaction.token;
+  assert.ok(after > time);
+  button.dispatch('click', {detail: 2});
+  assert.equal(env.game().time, after);
+  assert.equal(env.view().interaction.token, token, 'The second event of one double click cannot answer the next question');
+  assert.equal(env.mode().chooseInteraction(useful.id, question.token), false);
+  assert.equal(env.game().time, after);
 });

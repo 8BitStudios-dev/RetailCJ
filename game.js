@@ -2568,6 +2568,7 @@ function updatePanel() {
   if (observation) window.PLObservationUI.render(observation.view);
   const personalView = playerMode ? playerMode.view() : { enabled: false };
   personalView.interactionEnabled = Boolean(personalView.interactionEnabled && floorReady);
+  document.body.classList.toggle('careerChoosing', Boolean(personalView.enabled && personalView.interaction && !personalView.isOver));
   if (careerPromotionNotice && personalView.enabled) personalView.message = careerPromotionNotice;
   window.PLSpecialistUI.render(personalView);
   window.PLGameModes.render(chosenMode, careerCheckpoint, window.PLCareerSave.available(), careerStarted && SPECIALIST_ON ? TEAM.Tu : null);
