@@ -112,7 +112,7 @@ test('menu guards and shift closure cannot apply a stale conversation or create 
   assert.equal(env.game().orders.length, 0);
 });
 
-test('real animation frames hold the shift for reading and keep countdown independent of speed, menu, pause and GPU loss', async () => {
+test('real animation frames advance the floor while choosing and keep countdown independent of speed, menu, pause and GPU loss', async () => {
   const slow = fixture({tier: 'E', graphics: true});
   const fast = fixture({tier: 'E', graphics: true});
   await Promise.all([slow.context.PLFloorViewUI.ready, fast.context.PLFloorViewUI.ready]);
@@ -120,20 +120,89 @@ test('real animation frames hold the shift for reading and keep countdown indepe
   for (const [env, speed] of [[slow, 1], [fast, 4]]) {
     env.game().speed = speed;
     for (let t = 100; t <= 1000; t += 100) env.runFrame(t);
-    assert.equal(env.game().time, initial);
+    assert.ok(env.game().time > initial, 'Reading choices consumes time on the live floor');
   }
+  const slowElapsed = slow.game().time - initial, fastElapsed = fast.game().time - initial;
+  assert.ok(Math.abs(fastElapsed - slowElapsed * 4) < 0.16, 'Game speed changes elapsed floor time, with only one fixed-step remainder');
+  assert.ok(fast.mode().player().stats.stress > slow.mode().player().stats.stress, 'Existing work stress follows elapsed simulation time');
   assert.equal(slow.view().interaction.secondsLeft, fast.view().interaction.secondsLeft);
   const left = fast.view().interaction.secondsLeft;
+  const stoppedTime = fast.game().time, stoppedDecisionMinutes = fast.view().interaction.decisionMinutes;
   fast.game().speed = 0; fast.runFrame(1100);
   assert.equal(fast.view().interaction.secondsLeft, left);
+  assert.equal(fast.game().time, stoppedTime);
+  const pausedQuestion = fast.view().interaction;
+  assert.equal(fast.mode().chooseInteraction(pausedQuestion.options[0].id, pausedQuestion.token), false, 'An answer cannot perform work during explicit Pause');
   fast.game().speed = 4; fast.context.__sim.showModes(); fast.runFrame(1200);
   assert.equal(fast.view().interaction.secondsLeft, left);
+  assert.equal(fast.game().time, stoppedTime);
   fast.context.__sim.closeModes(); fast.context.PLFloorView.setReady(false); fast.runFrame(1300);
   assert.equal(fast.view().interaction.secondsLeft, left);
+  assert.equal(fast.game().time, stoppedTime);
+  assert.equal(fast.view().interaction.decisionMinutes, stoppedDecisionMinutes);
   fast.context.PLFloorView.setReady(true);
   assert.equal(fast.mode().tickChoice(18), true);
   assert.equal(fast.view().interaction.phase, 'probe');
   assert.equal(fast.view().stats.sales, 0);
+});
+
+test('beginner decisions stay manual while hesitation adds elapsed floor time exactly once to the conversation', async () => {
+  const quick = fixture({graphics: true});
+  const considered = fixture({graphics: true});
+  await Promise.all([quick.context.PLFloorViewUI.ready, considered.context.PLFloorViewUI.ready]);
+  const initialQuick = quick.game().time, initialConsidered = considered.game().time;
+  considered.evaluate(`
+    const waitingDuringDecision = spawnCustomer('buy', {product: 'iphone', hurry: 0, familiarity: 0, rude: false});
+    game.lineIn = [];
+    const waitingSlot = SLOTS.find(s => !s.taken && s.table.product === 'iphone');
+    waitingSlot.taken = waitingDuringDecision; waitingDuringDecision.slot = waitingSlot;
+    waitingDuringDecision.x = waitingSlot.x; waitingDuringDecision.y = waitingSlot.y;
+    waitingDuringDecision.state = 'waiting'; waitingDuringDecision.path = [];
+    waitingDuringDecision.wait = 0; waitingDuringDecision.patience = 100; waitingDuringDecision.tQueue = game.time;
+    window.waitingDuringDecision = waitingDuringDecision;
+  `);
+  const token = considered.view().interaction.token;
+  for (let frame = 1; frame <= 30; frame++) considered.runFrame(frame * 100);
+  const hesitation = considered.game().time - initialConsidered;
+  assert.ok(hesitation > 3.8 && hesitation < 4.1);
+  assert.equal(considered.view().interaction.token, token, 'An untimed beginner still chooses every phase manually');
+  assert.equal(considered.view().interaction.secondsLeft, null);
+  assert.ok(Math.abs(considered.context.waitingDuringDecision.wait - hesitation) < 1e-7, 'Other customers continue waiting on the live floor');
+  assert.ok(considered.context.waitingDuringDecision.patience < 100);
+  assert.ok(considered.mode().player().stats.stress > quick.mode().player().stats.stress);
+  complete(quick); complete(considered);
+  const a = quick.view().lastInteraction, b = considered.view().lastInteraction;
+  assert.equal(a.decisions, 5); assert.equal(b.decisions, 5);
+  assert.equal(a.decisionMinutes, 0);
+  assert.equal(a.workMinutes, b.workMinutes, 'Identical actions retain identical work costs');
+  assert.equal(b.decisionMinutes, Math.round(hesitation * 10) / 10);
+  assert.equal(b.minutes, Math.round((b.workMinutes + hesitation) * 10) / 10);
+  assert.ok(Math.abs(quick.game().time - initialQuick - a.workMinutes) < 1e-7);
+  assert.ok(Math.abs(considered.game().time - initialConsidered - b.workMinutes - hesitation) < 1e-7,
+    'Previously elapsed decision time is reported, never charged again when submitting');
+  assert.equal(considered.context.bridgeClient.interactionResult.decisionMinutes, b.decisionMinutes);
+});
+
+test('the shift can end during a pending manual choice and Pause holds that boundary without granting a sale', async () => {
+  const env = fixture({graphics: true});
+  await env.context.PLFloorViewUI.ready;
+  const q = env.view().interaction;
+  env.evaluate('game.time = playerMode.shiftEnd() - 0.1; game.speed = 0');
+  const before = env.game().time;
+  env.runFrame(100);
+  assert.equal(env.game().time, before);
+  assert.equal(env.game().over, false);
+  env.game().speed = 1;
+  env.runFrame(200);
+  env.runFrame(300);
+  assert.equal(env.game().time, env.mode().shiftEnd());
+  assert.equal(env.game().over, true);
+  assert.equal(env.view().interaction, null);
+  assert.equal(env.view().lastInteraction, null);
+  assert.equal(env.view().stats.sales, 0);
+  assert.equal(env.view().stats.served, 0);
+  assert.equal(env.game().orders.length, 0);
+  assert.equal(env.mode().chooseInteraction(q.options[0].id, q.token), false);
 });
 
 test('a deliberate unverified promise creates stress and recovery; a correct choice is never randomly replaced by an error', () => {
@@ -276,7 +345,7 @@ test('countdown refreshes retain button identity and tokens, while repeated keyb
   const time = env.game().time;
   const seconds = env.view().interaction.secondsLeft;
   for (let frame = 1; frame <= 15; frame++) env.runFrame(frame * 100);
-  assert.equal(env.game().time, time, 'Reading the compact choices does not consume the shift');
+  assert.ok(env.game().time > time, 'Reading choices consumes shift time without replacing their buttons');
   assert.ok(env.view().interaction.secondsLeft < seconds);
   for (const [index, button] of buttons.entries()) {
     assert.equal(panel.querySelectorAll('.playerChoice')[index], button);

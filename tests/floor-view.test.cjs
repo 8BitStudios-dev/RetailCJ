@@ -117,7 +117,7 @@ test('3D boots automatically and ignores an old 2D preference without changing p
     const saved = storage(view);
     const entries = [...saved];
     const env = makeEnvironment({storage: saved, webgl2: true, importFloorRenderer: specifier => {
-      imports++; assert.equal(specifier, './renderer-3d.js?v=2.3.0');
+      imports++; assert.equal(specifier, './renderer-3d.js?v=2.3.1');
       return Promise.resolve(fixture.module);
     }});
     assert.equal(await env.context.PLFloorViewUI.ready, true);
@@ -156,7 +156,7 @@ test('the page keeps game commands above the floor and its compact camera bar di
   const assets = [...env.html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi)]
     .map(match => match[1]).filter(url => !/^(?:https?:)?\/\//.test(url));
   for (const asset of assets) {
-    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.3.0', asset);
+    assert.equal(new URL(asset, env.context.location.href).searchParams.get('v'), '2.3.1', asset);
     assert.equal(fs.existsSync(path.join(gameDirectory, asset.split('?')[0])), true, asset);
   }
   const floorPosition = env.html.indexOf('id="floor3d"');
@@ -175,11 +175,15 @@ test('the page keeps game commands above the floor and its compact camera bar di
   env.context.__sim.selectMode('career');
   assert.equal(env.get('playerCommands').closest('#playerPanel'), env.get('playerPanel'),
     'Personal commands belong to the current interaction workspace');
-  for (const action of ['next', 'focus', 'pause', 'engage']) {
+  for (const action of ['next', 'pause', 'engage']) {
     const button = doc.querySelector('[data-specialist-action="' + action + '"]');
     assert.ok(button, action);
     assert.equal(button.closest('#playerCommands'), env.get('playerCommands'));
   }
+  const follow = doc.querySelector('[data-floor-view="player"]');
+  assert.ok(follow);
+  assert.equal(follow.closest('#cameraControls'), env.get('cameraControls'));
+  assert.equal(doc.querySelector('[data-specialist-action="focus"]'), null, 'The personal camera has one control below the floor');
 });
 
 test('without WebGL the floor explains the failure and real animation frames cannot consume a saved career', async () => {
@@ -327,9 +331,11 @@ test('career cameras follow the current player, respect manual focus, and reset 
   assert.equal(viewport.classList.contains('floorExpanded'), true);
   env.context.document.querySelector('[data-floor-view="express"]').click();
   assert.equal(fixture.calls.views.at(-1), 'express');
-  env.context.document.querySelector('[data-specialist-action="focus"]').click();
+  const selected = env.game().selected;
+  follow.click();
   assert.equal(fixture.calls.views.at(-1), 'player');
-  assert.equal(env.game().selected, first);
+  assert.equal(fixture.calls.entities.at(-1), first);
+  assert.equal(env.game().selected, selected, 'Changing the camera does not replace the selected customer or table');
   assert.equal(viewport.classList.contains('floorExpanded'), true, 'Focusing the player preserves the chosen floor size');
   env.context.__sim.newDay(30);
   const next = env.mode().player();

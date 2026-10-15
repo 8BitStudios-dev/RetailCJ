@@ -101,9 +101,11 @@
     const queue = node('span', 'playerQueue', queueSummary);
     const browsing = node('span', 'playerBrowsing', queueSummary);
     const controls = node('div', 'playerControls', commands);
-    const nextRow = node('div', 'playerNextRow', controls);
-    const next = button(nextRow, 'next', 'Segui il prossimo cliente', 'playerNext on');
-    const autoLabel = node('label', 'playerAutoNext', nextRow);
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', 'Gestisci le visite');
+    const next = button(controls, 'next', 'Prossimo cliente', 'playerNext on');
+    next.setAttribute('aria-label', 'Segui il prossimo cliente');
+    const autoLabel = node('label', 'playerAutoNext', controls);
     const autoNext = node('input', '', autoLabel);
     autoNext.type = 'checkbox';
     autoNext.id = 'playerAutoNext';
@@ -117,18 +119,10 @@
     autoNext.addEventListener('change', () => {
       if (typeof actions.setAutoNext === 'function') actions.setAutoNext(Boolean(autoNext.checked));
     });
-    const secondary = node('div', 'playerSecondaryActions', controls);
-    const engage = button(secondary, 'engage', 'Ingaggia', 'playerEngage');
+    const engage = button(controls, 'engage', 'Ingaggia', 'playerEngage');
     engage.setAttribute('aria-label', 'Ingaggia un cliente che sta esplorando');
-    const focus = button(secondary, 'focus', 'Mostrami sul floor');
-    const pause = button(secondary, 'pause', 'Pausa 15 min');
-    [[next, 'Segui il prossimo cliente', 'Prossimo cliente'], [focus, 'Mostrami sul floor', 'Seguimi'],
-      [pause, 'Pausa 15 min', 'Pausa']].forEach(([control, full, short]) => {
-      control.setAttribute('aria-label', full);
-      control.replaceChildren();
-      node('span', 'playerActionFull', control, full);
-      node('span', 'playerActionShort', control, short);
-    });
+    const pause = button(controls, 'pause', 'Pausa', 'playerPause');
+    pause.setAttribute('aria-label', 'Pausa 15 min');
 
     const current = node('div', 'playerCurrent', root);
     root.insertBefore(commands, current);
@@ -180,7 +174,7 @@
       return { control, label, detail, minutes, recommendation, optionId: null, token: null, canChoose: false };
     });
     const choiceFootnote = node('p', 'playerChoiceFootnote', interaction,
-      'I minuti indicano il lavoro sul floor; leggere non consuma il turno.');
+      'Il tempo scorre anche durante le scelte. I minuti indicano il lavoro necessario.');
     const choiceHelp = node('details', 'playerDecisionHelp playerMobileDetails', interaction);
     choiceHelp.id = 'playerChoiceHelp';
     node('summary', '', choiceHelp, 'Aiuto e dettagli');
@@ -272,7 +266,7 @@
       stages, interaction, interactionPhase, timer, speaker, speech, cue, leadHint, choiceRows, choiceFootnote, feedback,
       choiceHelp, helpCue, helpLead, explanationRows, visitDetails, visitIdentity, visitStatus, visitShift,
       visitDescription, visitState, visitStarted, result, resultTitle, resultMeta, resultRows, visitHint, submittedToken: null,
-      current, stats, extraStats, energy, queue, browsing, next, autoNext, engage, focus, pause,
+      current, stats, extraStats, energy, queue, browsing, next, autoNext, engage, pause,
       turnDetails, turnAutoNext, message, recent, historyRows };
     for (const container of [root]) {
       container.addEventListener('click', event => {
@@ -415,11 +409,14 @@
       const seconds = Number(conversation.secondsLeft);
       const hasTimer = conversation.secondsLeft !== null && conversation.secondsLeft !== undefined && Number.isFinite(seconds);
       r.timer.hidden = Boolean(conversation.complete);
-      if (hasTimer) {
+      if (view.interactionEnabled === false) {
+        setText(r.timer, 'Scelte sospese');
+        r.timer.classList.remove('isNearEnd');
+      } else if (hasTimer) {
         setText(r.timer, Math.max(0, Math.ceil(seconds)) + ' s per scegliere');
         r.timer.classList.toggle('isNearEnd', seconds <= 5);
       } else {
-        setText(r.timer, 'Scegli con calma');
+        setText(r.timer, 'Il turno continua');
         r.timer.classList.remove('isNearEnd');
       }
       r.choiceFootnote.hidden = Boolean(conversation.complete);
@@ -496,7 +493,6 @@
     r.next.disabled = !view.canNext || Boolean(view.isOver);
     r.engage.disabled = !view.canEngage || Boolean(view.isOver);
     r.pause.disabled = !view.canPause || Boolean(view.isOver);
-    r.focus.disabled = !view.enabled;
     setText(r.message, view.engagement && view.engagement.message || view.message);
     r.message.hidden = !r.message.textContent || r.message.textContent === r.feedback.textContent
       || Boolean(conversation);

@@ -264,9 +264,9 @@ export class FloorRenderer {
     for (const tree of layout.trees || []) this.buildTree(tree);
     for (const stool of layout.stools || []) this.buildStool(stool);
     if (layout.screen) this.buildScreen(layout.screen);
-    if (layout.express) this.buildPoint(layout.express, 'EXPRESS', 0.91);
-    if (layout.pointProduct) this.buildPoint(layout.pointProduct, 'POINT PRODUCT', 1.6);
-    if (layout.pointGenius) this.buildPoint(layout.pointGenius, 'POINT GENIUS BAR', 1.85);
+    if (layout.express) this.buildPoint(layout.express);
+    if (layout.pointProduct) this.buildPoint(layout.pointProduct);
+    if (layout.pointGenius) this.buildPoint(layout.pointGenius);
     if (layout.door) this.buildDoor(layout.door, 'INGRESSO', '#1680cf');
     if (layout.backDoor) this.buildDoor(layout.backDoor, 'OPERATIONS', '#688c79');
     this.batchStaticWorld();
@@ -275,7 +275,7 @@ export class FloorRenderer {
 
   batchStaticWorld() {
     // These pieces never move and never own a selection target. Preserve the
-    // table groups and label sprites; batch only repeated static meshes.
+    // selectable table groups; batch only repeated static meshes.
     this.world.updateMatrixWorld(true);
     const inverse = this.world.matrixWorld.clone().invert();
     const groups = new Map();
@@ -321,9 +321,6 @@ export class FloorRenderer {
     const shadow = this.mesh(group, this.baseGeometry.circle, this.material('#283447', { basic: true, opacity: 0.10 }), 0.07, 0.018, 0.08, width * 0.7, length * 0.6, 1);
     shadow.rotation.x = -Math.PI / 2;
     const {top} = buildTableFrame(this, group, table, {width, length});
-    const label = this.label(table.name, { width: 0.40, height: 0.15, background: table.kind === 'support' ? '#276782' : '#f5f0e6', foreground: table.kind === 'support' ? '#ffffff' : '#725940' });
-    label.position.set(0, top + 0.12, -length * 0.45);
-    group.add(label);
     buildProductDisplay(this, group, table, {width, length, top});
     if (table.kind === 'support') buildBarStools(this, group, {width, length, top});
     this.batchTable(group);
@@ -414,11 +411,7 @@ export class FloorRenderer {
     group.add(caption);
   }
 
-  buildPoint(station, text, width) {
-    const at = this.point(station.x, station.y);
-    const marker = this.label(text, { width, height: 0.25, background: '#287dcc', foreground: '#ffffff', fontSize: 40 });
-    marker.position.copy(at).add(new THREE.Vector3(0, 1.18, 0.28));
-    this.world.add(marker);
+  buildPoint(station) {
     const geometry = this.keep(new THREE.RingGeometry(0.06, 0.085, 16));
     const material = this.material('#3288d4', { basic: true, opacity: 0.48 });
     (station.line || []).forEach(spot => {

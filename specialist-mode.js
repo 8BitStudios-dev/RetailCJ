@@ -26,6 +26,8 @@
       let interactionCustomer = null;
       let lastInteraction = null;
       let workingChoice = false;
+      let decisionMinutes = 0;
+      let decisionClock = null;
       let autoNext = savedAutoNext();
       let engagement = null;
       let invitedCustomer = null;
@@ -227,6 +229,8 @@
         interactionCustomer = null;
         lastInteraction = null;
         workingChoice = false;
+        decisionMinutes = 0;
+        decisionClock = null;
         engagement = null;
         invitedCustomer = null;
         browserResume = null;
@@ -296,9 +300,11 @@
         if (!owns(entity) || !personal(c) || c.tradeOnly || !root.PLCareerInteraction || !canInteract()) return false;
         interaction = root.PLCareerInteraction.create(c, entity.stats);
         interactionCustomer = c;
+        decisionMinutes = 0;
+        decisionClock = game().time;
         c.interactionControlled = true;
         entity.state = 'interaction'; entity.t = Infinity;
-        message = 'Scegli come proseguire. Il turno avanza con le tue azioni; leggere non consuma minuti.';
+        message = 'Scegli come proseguire: il turno continua anche mentre decidi. Usa Pausa per fermare il gioco.';
         return true;
       }
       function applyAnswer(answer) {
@@ -312,12 +318,16 @@
         message = answer.feedback;
         if (session.complete) {
           const result = session.result;
+          result.workMinutes = result.minutes;
+          result.decisionMinutes = Math.round(decisionMinutes * 10) / 10;
+          result.minutes = Math.round((result.workMinutes + decisionMinutes) * 10) / 10;
           if (c.engagedBrowser && !c.engagementPurchaseReady) {
             result.purchase = false;
             result.feedback = [result.feedback[0], 'Una consulenza utile può concludersi senza un acquisto: il cliente era qui per esplorare.'];
           }
           lastInteraction = {
-            feedback: result.feedback.slice(0, 2), minutes: result.minutes, decisions: result.decisions,
+            feedback: result.feedback.slice(0, 2), minutes: result.minutes,
+            workMinutes: result.workMinutes, decisionMinutes: result.decisionMinutes, decisions: result.decisions,
             reply: answer.feedback,
             qualityLabel: result.seriousError ? 'Promessa da verificare' : result.qualityDelta >= 8 ? 'Conversazione curata' : result.qualityDelta >= 0 ? 'Conversazione buona' : 'Conversazione da migliorare',
           };
@@ -327,7 +337,7 @@
         return true;
       }
       function chooseInteraction(id, token) {
-        if (workingChoice || !hasChoice() || !canInteract()) return false;
+        if (workingChoice || !hasChoice() || !canInteract() || game().speed <= 0) return false;
         return applyAnswer(interaction.choose(id, token));
       }
       function tickChoice(seconds) {
@@ -445,6 +455,7 @@
         engagement = null;
         interaction = null;
         interactionCustomer = null;
+        decisionClock = null;
         clearReservations(game());
         message = 'Turno concluso. Le visite incomplete restano distinte dai servizi conclusi.';
       }
@@ -452,6 +463,10 @@
         const g = game();
         if (!g || !entity || closing) return;
         records.forEach(record => { if (!record.closed) sync(record); });
+        if (interaction && Number.isFinite(decisionClock)) {
+          if (!workingChoice && hasChoice()) decisionMinutes += Math.max(0, g.time - decisionClock);
+          decisionClock = g.time;
+        }
         requireRest();
         // Auto handles the service queue only. Invitations to browsers always need a click.
         if (entity.state === 'idle' && !entity.customer) entity.t = Infinity;
@@ -517,8 +532,8 @@
         return {
           enabled: true, name: NAME, role: career.role, career, shift: shift ? { ...shift } : null,
           needsBreak: Boolean(s && s.needsBreak), status, phase: followUp ? 'extend' : phase(s),
-          interaction: hasChoice() ? interaction.view() : null,
-          interactionEnabled: canInteract(), lastInteraction,
+          interaction: hasChoice() ? { ...interaction.view(), decisionMinutes: Math.round(decisionMinutes * 10) / 10 } : null,
+          interactionEnabled: canInteract() && g.speed > 0, lastInteraction,
           autoNext, browsing: browsers(g).length,
           canEngage: Boolean(liveCustomerActions() && available() && browsers(g).length),
           engagement: engagement ? { ...engagement } : null,

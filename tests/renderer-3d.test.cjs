@@ -21,8 +21,8 @@ const deepFreeze = value => {
   return value;
 };
 
-function canvas(width = 850, height = 600) {
-  const context = new Proxy({}, {get: (target, key) => key in target ? target[key] : () => {}, set: (target, key, value) => {target[key] = value; return true;}});
+function canvas(width = 850, height = 600, paintedText = []) {
+  const context = new Proxy({fillText(text) {paintedText.push(text);}}, {get: (target, key) => key in target ? target[key] : () => {}, set: (target, key, value) => {target[key] = value; return true;}});
   return {width, height, clientWidth: width, clientHeight: height, getContext: () => context,
     getBoundingClientRect() {return {left: 11, top: 13, width: this.clientWidth, height: this.clientHeight};},
     addEventListener() {}, removeEventListener() {}};
@@ -35,7 +35,8 @@ const snapshot = extra => ({customers: [], staff: [], selected: null, time: 600,
 
 async function fixture({width = 850, height = 600, world = false} = {}) {
   const [THREE, {FloorRenderer}] = await modules;
-  global.document = {createElement: type => {assert.equal(type, 'canvas'); return canvas();}};
+  const paintedText = [];
+  global.document = {createElement: type => {assert.equal(type, 'canvas'); return canvas(850, 600, paintedText);}};
   const view = Object.create(FloorRenderer.prototype);
   const camera = new THREE.OrthographicCamera(-12, 12, 12, -12, 0.1, 120);
   Object.assign(view, {canvas: canvas(width, height), camera, scene: new THREE.Scene(), layout: null,
@@ -58,7 +59,7 @@ async function fixture({width = 850, height = 600, world = false} = {}) {
   const layout = JSON.parse(JSON.stringify(env.context.PLFloorView.snapshot().layout));
   if (world) view.buildWorld(deepFreeze(layout));
   else {view.layout = layout; view.setView('overview');}
-  return {THREE, view, layout, env};
+  return {THREE, view, layout, env, paintedText};
 }
 
 test('Three.js scene math only, without WebGL: frozen simulation entities remain unchanged and finite', async () => {
@@ -182,7 +183,7 @@ test('Product, Genius Bar and Express cameras frame their real point, customers 
   assert.equal(JSON.stringify(layout), unchangedLayout, 'Framing cannot modify the simulation layout');
 });
 
-test('nonselectable static fixtures use real InstancedMesh batches while tables and labels keep their identities', async () => {
+test('nonselectable static fixtures use real InstancedMesh batches while selectable tables keep their identities', async () => {
   const {THREE, view, layout} = await fixture({world: true});
   const stats = view.getStats();
   assert.ok(stats.staticMeshesBefore > 500, 'The fixture includes the full store accessory display');
@@ -191,7 +192,7 @@ test('nonselectable static fixtures use real InstancedMesh batches while tables 
   assert.ok(stats.tableDrawCalls < stats.tableMeshesBefore, 'Detailed selectable displays must also benefit from batching');
   assert.ok(stats.tableDrawCalls <= (layout.tables.length + layout.support.length) * 36, 'Display detail must keep table draw calls bounded');
   assert.ok(stats.tableBatches > 0);
-  let instances = 0, labels = 0;
+  let instances = 0;
   view.world.traverse(object => {
     if (object.isInstancedMesh) {
       assert.ok(object instanceof THREE.InstancedMesh);
@@ -200,15 +201,52 @@ test('nonselectable static fixtures use real InstancedMesh batches while tables 
       const matrix = new THREE.Matrix4();
       for (let i = 0; i < object.count; i++) {object.getMatrixAt(i, matrix); assert.ok(matrix.elements.every(Number.isFinite));}
     }
-    if (object.isSprite) labels++;
   });
   assert.ok(instances > 500);
-  assert.ok(labels >= layout.tables.length + layout.support.length);
   assert.equal(view.tables.size, layout.tables.length + layout.support.length);
   for (const {table, group} of view.tables.values()) {
     assert.ok(view.pickables.includes(group));
     assert.deepEqual(group.userData.selection, {type: 'table', name: table.name});
     assert.ok(group.children.some(object => object.isMesh), 'A selectable table keeps real geometry, including instanced parts');
+  }
+});
+
+test('table and station nameplates stay hidden while furniture, queue markers and focus cameras remain available', async () => {
+  const {THREE, view, layout, paintedText} = await fixture({world: true});
+  const unwanted = [...layout.tables, ...layout.support].map(table => table.name)
+    .concat(['GENIUS BAR', 'EXPRESS', 'POINT PRODUCT', 'POINT GENIUS BAR']);
+  for (const text of unwanted) assert.ok(!paintedText.includes(text), `${text} must not be painted onto a floor nameplate`);
+  for (const {table, group} of view.tables.values()) {
+    let sprites = 0, meshes = 0;
+    group.traverse(object => {if (object.isSprite) sprites++; if (object.isMesh) meshes++;});
+    assert.equal(sprites, 0, `${table.name} has no floating table label`);
+    assert.ok(meshes > 0 && view.pickables.includes(group), `${table.name} retains its furniture and selection target`);
+  }
+  assert.ok(paintedText.includes('Today at Apple'));
+  assert.ok(paintedText.includes('INGRESSO'));
+
+  // Use real scene and instance transforms: removing station captions must not
+  // erase the queue locations that visitors still use in the simulation.
+  const markerPositions = [];
+  view.world.updateMatrixWorld(true);
+  view.world.traverse(object => {
+    if (!object.isMesh || object.geometry.type !== 'RingGeometry' || object.geometry.parameters.innerRadius !== 0.06) return;
+    const count = object.isInstancedMesh ? object.count : 1;
+    for (let index = 0; index < count; index++) {
+      const transform = object.matrixWorld.clone();
+      if (object.isInstancedMesh) {const instance = new THREE.Matrix4(); object.getMatrixAt(index, instance); transform.multiply(instance);}
+      markerPositions.push(new THREE.Vector3().setFromMatrixPosition(transform));
+    }
+  });
+  for (const [mode, station] of [['express', layout.express], ['product', layout.pointProduct], ['genius', layout.pointGenius]]) {
+    for (const spot of station.line) {
+      const position = view.point(spot.x, spot.y, 0.025);
+      assert.ok(markerPositions.some(marker => marker.distanceTo(position) < 1e-5), `${mode} queue spot remains visible`);
+    }
+    view.setView(mode);
+    assert.equal(view.view, mode);
+    const focused = view.point(station.x, station.y).project(view.camera);
+    assert.ok(Math.abs(focused.x) < 1 && Math.abs(focused.y) < 1, `${mode} focus remains on its real station`);
   }
 });
 

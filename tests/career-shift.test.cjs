@@ -48,16 +48,21 @@ for (const {tier, weeklyHours, hours, end} of contracts) {
     const env = fixture(tier, {clean: false});
     assert.deepEqual(env.view().shift, {start: 10 * 60, end, hours, weeklyHours});
     assert.equal(env.mode().shiftEnd(), end);
-    const result = env.evaluate(`(() => {
-      let ticks = 0;
-      while (!game.over && ticks++ < 4000) {
-        if (playerMode.view().canNext) playerMode.takeNext();
-        if (playerMode.player().needsBreak && playerMode.view().canPause) playerMode.requestBreak();
-        ${guidedChoiceSource}
-        step(0.25);
-      }
-      return {over: game.over, time: game.time, day: game.day};
-    })()`);
+    // Exercise the same full shift without treating one VM call's watchdog as
+    // a performance benchmark. Batches retain every choice and quarter-minute
+    // step; the overall simulation budget remains at most 4000 ticks.
+    let result;
+    for (let ticks = 0; ticks < 4000 && !env.game().over; ticks += 100) {
+      result = env.evaluate(`(() => {
+        for (let tick = 0; tick < 100 && !game.over; tick++) {
+          if (playerMode.view().canNext) playerMode.takeNext();
+          if (playerMode.player().needsBreak && playerMode.view().canPause) playerMode.requestBreak();
+          ${guidedChoiceSource}
+          step(0.25);
+        }
+        return {over: game.over, time: game.time, day: game.day};
+      })()`);
+    }
     assert.equal(result.over, true);
     assert.equal(result.time, end);
     assert.equal(result.day, 17);

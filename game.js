@@ -2724,12 +2724,10 @@ const FIXED = 0.05; // minuti di gioco per passo
 let acc = 0, last = performance.now();
 function frame(now) {
   const real = Math.min(0.1, (now - last) / 1000); last = now;
-  if (floorReady && playerMode && playerMode.hasChoice()) {
-    acc = 0;
-    playerMode.tickChoice(real);
-  } else if (floorReady) {
+  if (floorReady) {
     acc += real * game.speed / REAL_SEC_PER_MIN;
     while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
+    if (playerMode && playerMode.hasChoice()) playerMode.tickChoice(real);
   } else acc = 0;
   render(real);
   if (intro.on) drawIntro(real);

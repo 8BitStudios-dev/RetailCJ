@@ -304,7 +304,7 @@ test('the actual personal shift boundary releases an unanswered invitation witho
   assert.equal(env.get('playerCommands').querySelector('[data-specialist-action="engage"]').disabled, true);
 });
 
-test('the real Auto checkbox sits beside Next, survives renders, and manual engagement fires once from its nested command panel', async () => {
+test('the four visit controls share one flat row, Auto survives renders, and manual engagement fires once', async () => {
   const env = await fixture();
   const visitor = browser(env, {id: 5});
   env.evaluate('updatePanel()');
@@ -313,12 +313,15 @@ test('the real Auto checkbox sits beside Next, survives renders, and manual enga
   const toggle = commands.querySelector('[data-specialist-auto-next]');
   const next = commands.querySelector('[data-specialist-action="next"]');
   const engage = commands.querySelector('[data-specialist-action="engage"]');
-  const row = next.closest('.playerNextRow');
+  const pause = commands.querySelector('[data-specialist-action="pause"]');
+  const row = commands.querySelector('.playerControls');
   const label = toggle.closest('label');
-  assert.ok(row && label && engage);
+  assert.ok(row && label && engage && pause);
   assert.equal(toggle.type, 'checkbox');
-  assert.equal(row.children.indexOf(label), row.children.indexOf(next) + 1);
-  assert.equal(label.parentElement, row);
+  assert.deepEqual(row.children, [next, label, engage, pause], 'Next, Auto, Ingaggia and Pausa have a single shared row in that order');
+  assert.equal(commands.querySelector('.playerNextRow'), null);
+  assert.equal(commands.querySelector('.playerSecondaryActions'), null);
+  assert.equal(commands.querySelector('[data-specialist-action="focus"]'), null, 'Follow remains in the camera bar instead of adding a fifth visit control');
   assert.equal(commands.closest('#playerPanel'), panel);
   assert.ok(panel.children.indexOf(commands) < panel.children.indexOf(panel.querySelector('.playerCurrent')));
   assert.equal(panel.querySelector('.playerCurrent').hidden, true, 'An idle player has no empty conversation card');

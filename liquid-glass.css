@@ -154,8 +154,13 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
 .playerPanel .playerChoices { gap: 7px; margin-top: 10px; }
 .playerPanel .playerChoice { min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 15px; background: var(--glass-raised); color: var(--text); font-weight: 400; }
 .playerPanel .playerChoice.isRecommended { border-color: var(--accent); background: var(--glass-blue); }
+.playerPanel .playerChoice:not(:disabled):hover,
+.playerPanel .playerChoice:not(:disabled):focus-visible { color: var(--text); border-color: var(--accent); background: var(--glass-blue); filter: none; }
+.playerPanel .playerChoice:not(:disabled):active { color: var(--text); border-color: var(--accent); background: var(--glass-soft); filter: none; }
+.playerPanel .playerChoice:disabled { color: var(--muted); background: var(--glass-soft); border-color: var(--line); opacity: 1; filter: none; }
+.playerPanel .playerChoice.isRecommended:disabled { border-color: var(--accent); background: var(--glass-blue); }
 .playerPanel .playerChoiceHeading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-.playerPanel .playerChoiceLabel { min-width: 0; font-size: 14px; font-weight: 500; line-height: 1.35; }
+.playerPanel .playerChoiceLabel { min-width: 0; color: inherit; font-size: 14px; font-weight: 500; line-height: 1.35; }
 .playerPanel .playerChoiceMinutes { color: var(--muted); font-size: 11px; }
 .playerPanel .playerChoiceRecommendation { padding: 2px 6px; color: var(--accent); background: var(--glass-blue); border-radius: 6px; font-size: 10px; }
 .playerPanel .playerRecommendationFull, .playerPanel .playerChoiceDetail { display: none; }
@@ -217,16 +222,14 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
 .playerPanel .commandBar .playerQueue { width: 100%; min-width: 0; margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .playerQueueSummary { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; width: 100%; }
 .playerPanel .commandBar .playerQueueSummary .playerQueue { width: auto; }
-.playerPanel .commandBar .playerControls { display: flex; flex-wrap: wrap; width: 100%; gap: 7px; }
-.playerPanel .playerNextRow { display: flex; align-items: stretch; gap: 8px; min-width: 0; width: 100%; }
-.playerPanel .commandBar .playerNext { flex: 1; width: auto; min-width: 0; min-height: 44px; padding: 10px; border-radius: 14px; font-size: 14px; white-space: normal; }
-.playerAutoNext { display: flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; min-height: 44px; min-width: 68px; margin: 0; padding: 7px; border: 1px solid var(--line); border-radius: 14px; background: var(--glass-soft); font-size: 12px; cursor: pointer; }
-.playerAutoNext input { width: 19px; height: 19px; flex: none; margin: 0; }
+.playerPanel .commandBar .playerControls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: stretch; width: 100%; min-width: 0; gap: 5px; }
+.playerPanel .commandBar .playerControls > button { min-width: 0; min-height: 44px; padding: 8px; border-radius: 13px; font-size: 13px; white-space: nowrap; }
+.playerPanel .commandBar .playerNext { width: auto; min-width: 0; min-height: 44px; padding: 8px; border-radius: 13px; font-size: 13px; white-space: nowrap; }
+.playerAutoNext { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; min-width: 54px; margin: 0; padding: 5px; border: 1px solid var(--line); border-radius: 13px; background: var(--glass-soft); color: var(--text); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.playerAutoNext input { width: 18px; height: 18px; flex: none; margin: 0; }
 .playerAutoNextSetting { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 7px 0; color: var(--text); font-size: 12px; }
 .playerAutoNextSetting input { width: 19px; height: 19px; flex: none; margin: 0; }
 .playerControlHint { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
-.playerPanel .commandBar .playerSecondaryActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; margin: 0; }
-.playerPanel .commandBar .playerSecondaryActions button { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px; border-radius: 13px; font-size: 12px; }
 .playerBrowsing { color: var(--muted); font-size: 12px; }
 .careerChoosing .playerPanel #playerCommands { display: none; }
 
@@ -293,7 +296,6 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
 
 @media (hover: hover) {
   button:hover:not(:disabled) { filter: brightness(.98); }
-  .playerPanel .playerChoice:hover:not(:disabled) { border-color: var(--accent); background: var(--glass-blue); }
   .introBox #modeChoices .gameModeChoice:hover { border-color: var(--accent); background: var(--glass-blue); }
 }
 
@@ -329,12 +331,11 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
   .careerLayout .interactionPane, .careerLayout.floorIsExpanded .interactionPane { width: 100%; margin: 0; }
   .interactionPane .playerPanel { border-radius: 23px; padding: 12px; }
   .playerPanel .commandBar { padding: 0; margin-top: 9px; gap: 6px; }
-  .careerLayout .playerPanel .commandBar .playerControls { display: flex; flex-wrap: wrap; gap: 7px; }
+  .careerLayout .playerPanel .commandBar .playerControls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 4px; }
   .playerPanel .commandBar .playerQueue { font-size: 11px; }
-  .playerPanel .commandBar .playerNext { min-height: 44px; padding: 10px 8px; font-size: 14px; }
-  .playerPanel .commandBar .playerSecondaryActions { flex-wrap: nowrap; gap: 6px; }
-  .playerPanel .commandBar .playerSecondaryActions button { min-height: 44px; padding: 7px; font-size: 12px; }
-  .playerPanel .playerAutoNext { min-width: 64px; min-height: 44px; }
+  .playerPanel .commandBar .playerControls > button, .playerPanel .commandBar .playerNext { min-height: 44px; padding: 7px 6px; font-size: 12px; }
+  .playerPanel .playerAutoNext { min-width: 52px; min-height: 44px; padding: 4px; gap: 3px; font-size: 11px; }
+  .playerPanel .playerAutoNext input { width: 17px; height: 17px; }
   .playerPanel.isChoosing .playerCurrentTitle { font-size: 14px; line-height: 1.3; }
   .playerPanel.isChoosing .playerProgress { margin-top: 8px; gap: 3px; }
   .playerPanel.isChoosing .playerStep { padding: 5px 2px; font-size: 11px; line-height: 1.3; }
@@ -358,6 +359,8 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
 @media (max-width: 380px) {
   .careerLayout .hud #speed button { min-width: 29px; }
   .careerLayout .clock { font-size: 21px; }
+  .careerLayout .playerPanel .commandBar .playerControls { gap: 3px; }
+  .playerPanel .commandBar .playerControls > button, .playerPanel .commandBar .playerNext { padding-inline: 5px; }
   .playerPanel .playerEnergyBadge { flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 8px; }
 }
 
