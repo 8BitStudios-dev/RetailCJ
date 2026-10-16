@@ -5,15 +5,17 @@ const assert = require('node:assert/strict');
 const {makeEnvironment} = require('./environment.cjs');
 const {chooseGuided} = require('./interaction-helpers.cjs');
 
-function fixture({kind = 'buy', tier = 'S', comp = 0, graphics = false} = {}) {
+function fixture({kind = 'buy', tier = 'S', comp = 0, graphics = false, tutorialShifts = 3} = {}) {
   class FloorRenderer {
     resize() {} setView() {} render() {} dispose() {} focus() {} getStats() { return {}; }
   }
-  const env = makeEnvironment(graphics ? {webgl2: true,
-    importFloorRenderer: () => Promise.resolve({FloorRenderer})} : {});
+  const storage = new Map([['plgame.career.v1', JSON.stringify({version: 2, day: 14, phase: 'start', tutorialShifts,
+    profile: {tier, comp, mot: 65, stress: 0}})]]);
+  const env = makeEnvironment({storage, ...(graphics ? {webgl2: true,
+    importFloorRenderer: () => Promise.resolve({FloorRenderer})} : {})});
   env.context.fixtureKind = kind;
   env.evaluate(`
-    __sim.selectMode('career'); startDay();
+    __sim.resumeCareer(); startDay();
     game.arrivals = []; game.sessions = []; game.customers = [];
     game.lineIn = []; game.lineGB = []; game.lineEx = [];
     game.time = OPEN; game.nextRotation = Infinity; Math.random = () => 0.5;
@@ -183,6 +185,26 @@ test('beginner decisions stay manual while hesitation adds elapsed floor time ex
   assert.equal(considered.context.bridgeClient.interactionResult.decisionMinutes, b.decisionMinutes);
 });
 
+test('actual pending decisions and chosen work use their distinct tutorial stress rates', () => {
+  for (const [tutorialShifts, decisionScale, workScale] of [[0, 0.15, 0.55], [1, 0.25, 0.75], [2, 0.4, 0.9], [3, 0.4, 1]]) {
+    const env = fixture({tutorialShifts});
+    env.evaluate("game.focus.sales = 0; game.tactic = 'equilibrio'; game.dd = null; game.push = null; playerMode.player().stats.stress = 0");
+    const player = env.mode().player();
+    const question = env.view().interaction;
+    env.evaluate('updateStaff(playerMode.player(), 10)');
+    assert.ok(Math.abs(player.stats.stress - 0.08 * 10 * decisionScale) < 1e-9,
+      `Pending decision stress uses shift ${tutorialShifts + 1}'s reading rate`);
+    assert.equal(env.view().interaction.token, question.token, 'Measuring hesitation never answers the question');
+    const option = question.options.find(item => item.recommended);
+    const beforeWork = player.stats.stress;
+    assert.equal(env.mode().chooseInteraction(option.id, question.token), true);
+    assert.ok(Math.abs(player.stats.stress - beforeWork - 0.08 * option.minutes * workScale) < 1e-7,
+      `Selected work uses shift ${tutorialShifts + 1}'s working rate instead of its reading rate`);
+    assert.equal(env.view().interaction.phase, 'probe');
+    assert.equal(env.game().tutorialShifts, tutorialShifts, 'One answer does not consume a tutorial shift');
+  }
+});
+
 test('the shift can end during a pending manual choice and Pause holds that boundary without granting a sale', async () => {
   const env = fixture({graphics: true});
   await env.context.PLFloorViewUI.ready;
@@ -205,7 +227,7 @@ test('the shift can end during a pending manual choice and Pause holds that boun
   assert.equal(env.mode().chooseInteraction(q.options[0].id, q.token), false);
 });
 
-test('a deliberate unverified promise creates stress and recovery; a correct choice is never randomly replaced by an error', () => {
+test('an unverified promise adds recoverable stress while a correct choice is never randomly replaced by an error', () => {
   const good = fixture();
   good.evaluate('Math.random = () => 0');
   complete(good);
@@ -220,8 +242,10 @@ test('a deliberate unverified promise creates stress and recovery; a correct cho
   }
   assert.equal(wrong.context.bridgeClient.error, true);
   assert.equal(wrong.game().stats.errors, 1);
-  assert.equal(wrong.mode().player().needsBreak, true);
-  assert.ok(wrong.mode().player().stats.stress >= 50);
+  assert.equal(wrong.mode().player().needsBreak, false);
+  assert.equal(wrong.mode().player().wantsBreak, false);
+  assert.ok(wrong.mode().player().stats.stress > good.mode().player().stats.stress + 15);
+  assert.ok(wrong.mode().player().stats.stress < 70);
   assert.ok(wrong.context.bridgeClient.exp < good.context.bridgeClient.exp - 15,
     'An unverified promise affects the customer experience as well as player stress');
 });

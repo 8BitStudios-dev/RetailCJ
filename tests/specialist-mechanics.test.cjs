@@ -574,17 +574,25 @@ test('observation can be the injected default and NPCs dispatch without a player
 test('an autonomous observation day reaches closing with only store results and preserves observation the next day', () => {
   const env = makeEnvironment({seed: 0x5eed, specialistMode: false});
   env.evaluate('startDay()');
-  const result = env.evaluate(`(() => {
-    let ticks = 0, personalEntitiesSeen = false;
-    while (!game.over && ticks++ < 4000) {
-      step(0.25);
-      personalEntitiesSeen ||= game.staff.some(s => s.isPlayer || s.name === 'Tu') ||
-        game.customers.some(c => c.playerReserved || c.ownerId === 'PLAYER');
-      if (game.moment || game.planning || game.checkpoint) break;
-    }
-    return {over: game.over, time: game.time, ticks, personalEntitiesSeen,
-      moment: Boolean(game.moment), planning: game.planning, checkpoint: game.checkpoint};
-  })()`);
+  // Keep every observation step and ownership check while limiting each VM
+  // call independently of the complete day's execution time.
+  let result = {ticks: 0, personalEntitiesSeen: false};
+  while (!env.game().over && result.ticks < 4000) {
+    const batch = env.evaluate(`(() => {
+      let ticks = 0, personalEntitiesSeen = false;
+      while (!game.over && ticks < 100) {
+        step(0.25); ticks++;
+        personalEntitiesSeen ||= game.staff.some(s => s.isPlayer || s.name === 'Tu') ||
+          game.customers.some(c => c.playerReserved || c.ownerId === 'PLAYER');
+        if (game.moment || game.planning || game.checkpoint) break;
+      }
+      return {over: game.over, time: game.time, ticks, personalEntitiesSeen,
+        moment: Boolean(game.moment), planning: game.planning, checkpoint: game.checkpoint};
+    })()`);
+    result = {...batch, ticks: result.ticks + batch.ticks,
+      personalEntitiesSeen: result.personalEntitiesSeen || batch.personalEntitiesSeen};
+    if (result.moment || result.planning || result.checkpoint) break;
+  }
   assert.equal(result.moment, false);
   assert.equal(result.planning, false);
   assert.equal(result.checkpoint, false);

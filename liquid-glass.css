@@ -136,6 +136,13 @@ h3 { font-size: 12px; text-transform: none; letter-spacing: .01em; font-weight: 
 .playerStatus { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .playerShift { color: var(--muted); font-size: 11px; }
 .playerPanel.needsBreak .playerStatus { color: var(--glass-warning); }
+.playerTutorial { margin-top: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--glass-blue); color: var(--text); }
+.playerTutorialTitle { display: block; color: var(--accent); font-size: 11px; line-height: 1.4; font-weight: 600; }
+.playerTutorialFocus { margin: 3px 0 0; color: var(--text); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.playerPanel.isChoosing > .playerTutorial { margin: 0 0 7px; padding: 4px 8px; border: 0; border-left: 2px solid var(--accent); border-radius: 0 7px 7px 0; }
+.playerPanel.isChoosing .playerTutorialFocus { display: none; }
+.playerTutorialStage { margin: 7px 0 0; padding: 5px 8px; border-radius: 8px; background: var(--glass-blue); color: var(--text); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.playerTutorialExplanation { color: var(--muted); }
 .interactionPane .playerCurrent { margin-top: 10px; padding: 0; border: 0; background: transparent; border-radius: 0; }
 .interactionPane .playerCurrentTitle { font-size: 16px; font-weight: 600; line-height: 1.3; letter-spacing: -.2px; }
 .interactionPane .playerDescription { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }

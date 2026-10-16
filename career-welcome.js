@@ -16,9 +16,9 @@
     },
     {
       title: 'La pratica ti farà crescere',
-      text: 'All’inizio ogni visita richiederà molto tempo. Un errore ti farà salire lo stress: finisci con il cliente, poi recupera con una pausa di 15 minuti. Con la pratica diventerai più sicuro e più veloce.',
-      detail: 'Con le visite concluse e la formazione cresci fino a 100: poi scegli la promozione. Expert lavora 30 ore/settimana, 6 al giorno; Pro e Lead 40 ore, 8 al giorno. Riparti da competenza 0 e conservi la rapidità acquisita.',
-      tip: 'I tuoi tre fattori: motivazione dal clima della squadra e dal supporto di colleghi e Lead; stress dal lavoro e dagli errori; competenza dalla pratica. Più stress significa meno apprendimento. Pause e riposo aiutano a recuperare.'
+      text: 'Nei primi tre turni un Lead ti affianca: trovi indicazioni semplici e una scelta consigliata. Puoi recuperare dagli errori e imparare senza dover andare in pausa dopo ogni sbaglio. Il tempo del turno continua anche mentre scegli.',
+      detail: 'All’inizio ogni visita richiede più tempo; con la pratica diventi più sicuro e veloce. Visite e formazione fanno crescere la competenza fino a 100: poi puoi promuoverti. Expert: 30 ore/settimana, 6 al giorno; Pro e Lead: 40 ore, 8 al giorno. Nel nuovo ruolo riparti da 0 conservando la rapidità acquisita.',
+      tip: 'Motivazione dal sostegno della squadra, stress dal lavoro e dagli errori, competenza dalla pratica. Lo stress alto riduce l’apprendimento: quando hai bisogno di recuperare, finisci con il cliente e fai una pausa di 15 minuti.'
     }
   ];
   let actions = {};

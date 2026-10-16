@@ -52,9 +52,9 @@ for (const {tier, weeklyHours, hours, end} of contracts) {
     // a performance benchmark. Batches retain every choice and quarter-minute
     // step; the overall simulation budget remains at most 4000 ticks.
     let result;
-    for (let ticks = 0; ticks < 4000 && !env.game().over; ticks += 100) {
+    for (let ticks = 0; ticks < 4000 && !env.game().over; ticks += 10) {
       result = env.evaluate(`(() => {
-        for (let tick = 0; tick < 100 && !game.over; tick++) {
+        for (let tick = 0; tick < 10 && !game.over; tick++) {
           if (playerMode.view().canNext) playerMode.takeNext();
           if (playerMode.player().needsBreak && playerMode.view().canPause) playerMode.requestBreak();
           ${guidedChoiceSource}

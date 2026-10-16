@@ -322,6 +322,12 @@ function pickWeather() { const r = Math.random(); return r < 0.35 ? 'sole' : r <
 function newDay(dayOfMonth, opts = {}) {
   const labConfig = observation && observation.prepare(dayOfMonth, opts);
   if (labConfig) opts = {...opts, seed: labConfig.seed, weather: labConfig.weather};
+  const previousTutorialShifts = game && game.mode === 'career' && Number.isInteger(game.tutorialShifts)
+    ? Math.min(3, game.tutorialShifts + (game.over ? 1 : 0))
+    : window.PLCareerProgression.tutorialProgress(careerCheckpoint);
+  const tutorialShifts = SPECIALIST_ON
+    ? (Number.isInteger(opts.tutorialShifts) && opts.tutorialShifts >= 0 && opts.tutorialShifts <= 3 ? opts.tutorialShifts : previousTutorialShifts)
+    : 3;
   careerPromotionNotice = '';
   const date = new Date(2027, 0, dayOfMonth);
   const weekend = date.getDay() === 0 || date.getDay() === 6;
@@ -331,7 +337,7 @@ function newDay(dayOfMonth, opts = {}) {
   QUEUE.forEach(s => s.taken = null);
   EXPRESS_WAIT.forEach(s => s.taken = null);
   game = {
-    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours, observationConfig: labConfig,
+    mode: chosenMode, day: dayOfMonth, date, weekend, shiftHours: opts.shiftHours, tutorialShifts, observationConfig: labConfig,
     weather: opts.weather || pickWeather(), level: opts.level || null, levelIndex: opts.levelIndex,
     time: OPEN - 2, speed: game ? game.speed : 1,
     customers: [], staff: [], nextId: 1, lineIn: [], lineGB: [], lineEx: [],
@@ -722,6 +728,8 @@ function showBrief() {
   document.getElementById('brGoal').innerHTML = L ? `
     <div class="brSay"><svg class="ava" viewBox="0 0 14 20" aria-hidden="true" shape-rendering="crispEdges"></svg><div><b>${L.from}</b> <span class="sub">dalla leadership</span><br>«${L.msg}»</div></div>
     <div class="goalBox"><b>🎯 ${goalLine(L)}</b>${L.gate ? `<br><span class="sub">${gateLine(L)}</span>` : ''}<br><span class="sub">Spunto: ${L.hint}</span></div>` : '';
+  const tutorial = playerMode && playerMode.tutorial();
+  if (tutorial) document.getElementById('brGoal').innerHTML = `<div class="goalBox"><b>Affiancamento · Giorno ${tutorial.day} di 3</b><br>${tutorial.focus}<br><span class="sub">Il Lead: ${tutorial.leadMessage}</span></div>`;
   if (L) drawAvatar(document.querySelector('#brGoal .ava'), LEADER_LOOK);
   const stressed = game.staff.filter(x => x.stats.stress > 60).map(x => x.name).slice(0, 8);
   document.getElementById('brTeam').innerHTML =
@@ -1199,6 +1207,10 @@ const ERROR_TEXT = {
   point: 'manda il cliente nel posto sbagliato', express: 'sbaglia lo scontrino', accessori: 'consiglia l\'accessorio sbagliato',
   specialist: 'dà un\'informazione sbagliata', genius: 'deve rifare la riparazione', creative: 'dà un\'informazione sbagliata',
 };
+function careerErrorStress(s) {
+  const tutorial = playerMode && playerMode.owns(s) && playerMode.tutorial();
+  return window.PLCareerProgression.errorStress(s.stats) * (tutorial ? tutorial.errorStressMultiplier : 1);
+}
 function serve(s, c, weight = 1, errMul = 1) {
   c.servedBy = s;
   const k = care(s) * weight;
@@ -1217,7 +1229,7 @@ function serve(s, c, weight = 1, errMul = 1) {
     c.exp -= 22; c.error = true;
     say(s, 'oops', 2);
     if (!s.isPlayer) bump(s, 'mot', -3);
-    bump(s, 'stress', s.isPlayer ? window.PLCareerProgression.errorStress(s.stats) : 3);
+    bump(s, 'stress', s.isPlayer ? careerErrorStress(s) : 3);
     if (s.isPlayer && playerMode) {
       playerMode.recordError();
       careerLeadSupport(s, c, 'error');
@@ -1594,6 +1606,13 @@ const REPAIR_NAME = ['rapida', 'media', 'complessa'];
 const BUSY = new Set(['waitHelp', 'toHelp', 'assist', 'toAccWall', 'atAccWall', 'backToTable', 'tradeOnly', 'toBack', 'picking', 'delivering', 'handing', 'probe', 'demo', 'checkout', 'repair', 'advise', 'listening', 'escort', 'presenting', 'toCustomer', 'toWallCustomer', 'toBar']);
 // Point ed Express stressano più della vendita e degli accessori
 const ROLE_STRESS = { point: 1.3, express: 1.3, specialist: 1, accessori: 0.9, genius: 0.8, creative: 0.8, ops: 1 };
+function careerWorkStressScale(s) {
+  if (!playerMode || !playerMode.owns(s)) return 1;
+  const tutorial = playerMode.tutorial();
+  return playerMode.waitingForChoice()
+    ? (tutorial ? tutorial.decisionStressMultiplier : 0.4)
+    : (tutorial ? tutorial.workStressMultiplier : 1);
+}
 BUSY.add('tradeIn'); BUSY.add('financing'); BUSY.add('approach'); BUSY.add('listen'); BUSY.add('interaction'); BUSY.add('toBrowser');
 const SUPPORT_PHASES = new Set(['probe', 'listen', 'helping', 'advise', 'repair']);
 function requestExpert(s, c) {
@@ -1659,7 +1678,7 @@ function updateStaff(s, dt) {
   const arrived = moveAlong(s, dt);
   const c = s.customer;
   if (game.time >= OPEN && game.time < CLOSE && !onBreak(s)) {
-    if (BUSY.has(s.state) || s.customer) bump(s, 'stress', 0.08 * ROLE_STRESS[s.role] * TIER[s.tier].stress * T(s).stress * (ddOn('fun', 'squadra') && ddInvolved(s) ? 0.8 : 1) * (1 + 0.1 * F().sales) * (s.calmUntil > game.time ? 0.5 : 1) * (pushed(s) ? 1.4 : 1) * dt);
+    if (BUSY.has(s.state) || s.customer) bump(s, 'stress', 0.08 * ROLE_STRESS[s.role] * TIER[s.tier].stress * T(s).stress * (ddOn('fun', 'squadra') && ddInvolved(s) ? 0.8 : 1) * (1 + 0.1 * F().sales) * (s.calmUntil > game.time ? 0.5 : 1) * (pushed(s) ? 1.4 : 1) * careerWorkStressScale(s) * dt);
     else bump(s, 'stress', (s.post ? -0.03 : -0.05) * dt);
     if (!s.isPlayer) bump(s, 'mot', -0.015 * (1 - 0.3 * F().cel) * dt);
     else {
@@ -2203,7 +2222,7 @@ function finishInteraction(s, c, result) {
   if (result.seriousError) {
     c.exp = clamp(c.exp - 18);
     c.error = true; game.stats.errors++;
-    bump(s, 'stress', window.PLCareerProgression.errorStress(s.stats));
+    bump(s, 'stress', careerErrorStress(s));
     playerMode.recordError(); careerLeadSupport(s, c, 'error');
   }
   c.needKnown = Boolean(result.needKnown);
@@ -2799,6 +2818,7 @@ function saveCareerCheckpoint(phase) {
   if (!careerStarted || !SPECIALIST_ON || !game || game.level || !TEAM.Tu) return;
   const { mot, stress, comp, tier } = TEAM.Tu;
   careerCheckpoint = { version: 2, day: game.day, phase, profile: { mot, stress, comp, tier } };
+  careerCheckpoint.tutorialShifts = Math.min(3, game.tutorialShifts + (phase === 'completed' ? 1 : 0));
   if (playerMode) careerCheckpoint.shiftHours = playerMode.view().shift.hours;
   return window.PLCareerSave.save(careerCheckpoint);
 }
@@ -2858,7 +2878,7 @@ function beginMode(mode, day, opts = {}) {
 function selectMode(mode) {
   if (!['observation', 'career'].includes(mode)) return false;
   if (mode === 'career') delete TEAM.Tu;
-  return beginMode(mode, 7);
+  return beginMode(mode, 7, mode === 'career' ? { tutorialShifts: 0 } : {});
 }
 
 function resumeCareer() {
@@ -2870,7 +2890,8 @@ function resumeCareer() {
   if (saved.phase === 'completed') {
     day = restToNextShift(day);
   }
-  return beginMode('career', day, saved.phase === 'start' ? { shiftHours: saved.shiftHours } : {});
+  return beginMode('career', day, { ...(saved.phase === 'start' ? { shiftHours: saved.shiftHours } : {}),
+    tutorialShifts: window.PLCareerProgression.tutorialProgress(saved) });
 }
 
 function importCareer(snapshot) {

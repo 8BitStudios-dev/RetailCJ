@@ -85,7 +85,7 @@ test('a new career starts as Specialist with zero competence on the full 100-poi
   assert.equal(env.view().energy.competence, 0);
   assert.deepEqual(env.view().career, {tier: 'S', role: 'Specialist', index: 0,
     progress: 0, max: 100, nextRole: roles[1], canPromote: false, complete: false});
-  assert.deepEqual(save(env), {...checkpoint('S', 0), day: 7});
+  assert.deepEqual(save(env), {...checkpoint('S', 0), day: 7, tutorialShifts: 0});
 });
 
 test('100 is an exact promotion threshold and each new sales role restarts at zero', () => {
@@ -300,7 +300,7 @@ test('a promotion immediately checkpoints the new role at zero before opening an
     setProgress(env, 100);
     assert.equal(env.context.__sim.promoteCareer(), true);
     assert.equal(env.context.__sim.promoteCareer(), false);
-    assert.deepEqual(save(env), {version: 2, day: 7, phase, shiftHours: 4,
+    assert.deepEqual(save(env), {version: 2, day: 7, phase, shiftHours: 4, tutorialShifts: phase === 'completed' ? 1 : 0,
       profile: {tier: 'E', comp: 0, mot: env.mode().player().stats.mot, stress: env.mode().player().stats.stress}});
     const afterReload = makeEnvironment({storage: env.storage});
     afterReload.context.__sim.resumeCareer();
@@ -325,7 +325,7 @@ test('old version-one saves and backups migrate to Specialist without losing pro
   assert.equal(env.game().day, 21);
   assert.equal(competence(env), 74.75);
   assert.equal(env.mode().player().tier, 'S');
-  assert.deepEqual(save(env), {...migrated, shiftHours: 4});
+  assert.deepEqual(save(env), {...migrated, shiftHours: 4, tutorialShifts: 3});
 });
 
 test('schema validation rejects invalid tiers, progress beyond 100 and out-of-range legacy saves', () => {
@@ -418,7 +418,7 @@ test('a failed promotion write retains the new role in memory and export preserv
   assert.equal(env.downloads.length, 1);
   const backup = JSON.parse(await env.downloads[0].blob.text());
   assert.deepEqual(backup, {format: 'RetailCJ.career', version: 2,
-    career: {...checkpoint('E', 0), shiftHours: 4}});
+    career: {...checkpoint('E', 0), shiftHours: 4, tutorialShifts: 3}});
   const recovered = makeEnvironment();
   assert.equal(recovered.context.__sim.importCareer(backup.career).ok, true);
   recovered.context.__sim.resumeCareer();

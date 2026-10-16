@@ -46,7 +46,10 @@ function activeCareer(options = {}) {
     bump(playerMode.player(), 'comp', 7);
     window.__sim.showModes();
   `);
-  return {env, value, game: env.game(), player: env.mode().player(), client: env.mode().player().customer};
+  const checkpoint = load(env);
+  assert.deepEqual(checkpoint, options.storageError === 'write' ? value : {...value, tutorialShifts: 3},
+    'Resuming an advanced legacy career adds its completed tutorial marker only when storage accepts the checkpoint');
+  return {env, value: checkpoint, game: env.game(), player: env.mode().player(), client: env.mode().player().customer};
 }
 
 function assertVisitPreserved(fixture) {

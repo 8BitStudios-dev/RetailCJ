@@ -25,6 +25,10 @@
       if (![4, 6, 8].includes(snapshot.shiftHours) || snapshot.shiftHours > maxHours) return null;
       career.shiftHours = snapshot.shiftHours;
     }
+    if (snapshot.tutorialShifts !== undefined) {
+      if (!Number.isInteger(snapshot.tutorialShifts) || snapshot.tutorialShifts < 0 || snapshot.tutorialShifts > 3) return null;
+      career.tutorialShifts = snapshot.tutorialShifts;
+    }
     return career;
   }
 

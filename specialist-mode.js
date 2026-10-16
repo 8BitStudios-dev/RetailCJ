@@ -46,6 +46,10 @@
           !g.moment && g.time >= api.OPEN && g.time < shiftEnd();
       }
       function shiftEnd() { return shift ? shift.end : api.CLOSE; }
+      function tutorial() {
+        const g = game();
+        return g && entity ? root.PLCareerProgression.tutorial(g.tutorialShifts, entity.stats) : null;
+      }
       function available() {
         return entity && api.isAvailable(entity) && !api.onBreak(entity) && !entity.wantsBreak && !entity.needsBreak;
       }
@@ -298,7 +302,7 @@
       }
       function beginInteraction(c) {
         if (!owns(entity) || !personal(c) || c.tradeOnly || !root.PLCareerInteraction || !canInteract()) return false;
-        interaction = root.PLCareerInteraction.create(c, entity.stats);
+        interaction = root.PLCareerInteraction.create(c, entity.stats, { tutorial: tutorial() });
         interactionCustomer = c;
         decisionMinutes = 0;
         decisionClock = game().time;
@@ -373,7 +377,6 @@
       function recordError() {
         const g = game();
         if (!entity || closing || !g || g.over) return false;
-        if (entity.stats.tier === 'S') entity.needsBreak = true;
         return requireRest();
       }
       function completeBreak() {
@@ -530,7 +533,7 @@
           .map(r => ({ id: r.id, title: `Cliente #${r.id} · ${productLabel(r.customer)}`,
             outcome: historyOutcome(r), time: clock(r.closedAt ?? r.deliveredAt ?? r.startedAt) }));
         return {
-          enabled: true, name: NAME, role: career.role, career, shift: shift ? { ...shift } : null,
+          enabled: true, name: NAME, role: career.role, career, tutorial: tutorial(), shift: shift ? { ...shift } : null,
           needsBreak: Boolean(s && s.needsBreak), status, phase: followUp ? 'extend' : phase(s),
           interaction: hasChoice() ? { ...interaction.view(), decisionMinutes: Math.round(decisionMinutes * 10) / 10 } : null,
           interactionEnabled: canInteract() && g.speed > 0, lastInteraction,
@@ -547,7 +550,8 @@
         };
       }
       return { newDay, step, takeNext, reserveNext, requestBreak, recordError, completeBreak, shiftEnd, focus, promote, view, recordLeave, beforeClose,
-        beginInteraction, chooseInteraction, tickChoice, hasChoice,
+        beginInteraction, chooseInteraction, tickChoice, hasChoice, tutorial,
+        waitingForChoice: () => !workingChoice && hasChoice(),
         setAutoNext, engageBrowser, arriveAtBrowser,
         player: () => entity, owns };
     },

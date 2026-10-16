@@ -4,6 +4,14 @@
 
   const PHASES = ['approach', 'probe', 'present', 'listen', 'extend'];
   const LABELS = ['Approach · Accogli', 'Probe · Scopri', 'Present · Proponi', 'Listen · Ascolta', 'Extend · Completa'];
+  const TUTORIAL_HINTS = [
+    ['Parti da un’accoglienza semplice e lascia parlare il cliente.', 'Scopri il bisogno con una domanda aperta.',
+      'Mostra un esempio collegato a ciò che hai ascoltato.', 'Puoi tornare sul dubbio: non devi sapere già tutto.', 'Ricapitola con calma il prossimo passo.'],
+    ['Conferma da quale esigenza partire.', 'Cerca l’utilizzo concreto che guiderà la proposta.',
+      'Collega la soluzione al bisogno emerso.', 'Verifica che l’esempio sia stato utile.', 'Un accessorio serve quando completa davvero quell’utilizzo.'],
+    ['Concorda il ritmo della visita.', 'Una domanda mirata può evitare passaggi inutili.',
+      'Scegli le informazioni utili per questa persona.', 'Chiarisci il dubbio prima di proseguire.', 'Riepiloga e proponi solo i servizi pertinenti, rispettando i rifiuti.'],
+  ];
   let nextSession = 0;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const number = (value, fallback) => Number.isFinite(value) ? value : fallback;
@@ -216,7 +224,7 @@
     return ['data', 'travel', 'business', 'budget', 'protection', 'decided', 'family'][seed % 7];
   }
 
-  function create(inputCustomer, inputProfile) {
+  function create(inputCustomer, inputProfile, options = {}) {
     // Only capture primitives used here; live simulation objects can keep evolving independently.
     const c = {};
     ['id', 'kind', 'product', 'need', 'hurry', 'familiarity', 'fast', 'tradeIn', 'setup', 'accessory', 'service', 'business', 'tradeOnly']
@@ -253,7 +261,16 @@
     }
     const acceptsOptional = story.extension !== 'service' || seed % 3 !== 0;
     const sessionId = (++nextSession).toString(36) + '-' + seed.toString(36);
-    const guided = p.tier === 'S' && p.comp < 25;
+    const suppliedTutorial = options && options.tutorial;
+    const tutorial = suppliedTutorial && Number.isInteger(suppliedTutorial.day) && suppliedTutorial.day >= 1 && suppliedTutorial.day <= 3 ? {
+      day: suppliedTutorial.day,
+      title: typeof suppliedTutorial.title === 'string' ? suppliedTutorial.title : '',
+      focus: typeof suppliedTutorial.focus === 'string' ? suppliedTutorial.focus : '',
+      leadMessage: typeof suppliedTutorial.leadMessage === 'string' ? suppliedTutorial.leadMessage : '',
+      ...Object.fromEntries(['workStressMultiplier', 'decisionStressMultiplier', 'errorStressMultiplier']
+        .map(key => [key, Number.isFinite(suppliedTutorial[key]) ? suppliedTutorial[key] : 1])),
+    } : null;
+    const guided = Boolean(tutorial) || p.tier === 'S' && p.comp < 25;
     const progression = root.PLCareerProgression;
     const roleIndex = Math.max(0, ['S', 'E', 'P', 'L'].indexOf(p.tier));
     const learningTime = progression && typeof progression.learningTime === 'function'
@@ -443,7 +460,8 @@
       return {
         token: token(), phase: PHASES[phaseIndex], phaseLabel: LABELS[phaseIndex], index: phaseIndex,
         speaker: 'Cliente', speech, cue: story.cue,
-        hint: guided && best ? best.detail : '', guided,
+        hint: guided && best ? (tutorial ? TUTORIAL_HINTS[tutorial.day - 1][phaseIndex] + ' ' : '') + best.detail : '', guided,
+        tutorial: tutorial ? { ...tutorial } : null,
         options: available.map(item => ({ id: item.id, label: item.label, detail: item.detail,
           minutes: item.minutes, recommended: Boolean(guided && item.best) })),
         feedback, secondsLeft: finished ? null : secondsLeft, secondsTotal: guided || finished ? null : 18,

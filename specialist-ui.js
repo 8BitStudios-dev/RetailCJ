@@ -3,6 +3,8 @@
 
   const STAGES = ['Approach', 'Probe', 'Present', 'Listen', 'Extend'];
   const STAGE_HINTS = ['Accogli e inizi il contatto', 'Esplori bisogni e aspettative', 'Presenti una soluzione', 'Ascolti dubbi e verifichi la soluzione', 'Completi la visita e accompagni nei prossimi passi'];
+  const TUTORIAL_STAGE_HINTS = ['Parti da una domanda semplice.', 'Chiedi come userà il dispositivo.',
+    'Collega la proposta al suo bisogno.', 'Prima chiarisci il dubbio.', 'Completa solo con ciò che serve.'];
   const PHASES = {
     approach: 0, probe: 1, present: 2, listen: 3, extend: 4
   };
@@ -61,6 +63,11 @@
     const role = node('span', 'playerRole', identity, 'Specialist');
     const status = node('div', 'playerStatus', root);
     status.setAttribute('role', 'status');
+    const tutorial = node('section', 'playerTutorial', root);
+    tutorial.hidden = true;
+    tutorial.setAttribute('aria-label', 'Affiancamento iniziale');
+    const tutorialTitle = node('strong', 'playerTutorialTitle', tutorial);
+    const tutorialFocus = node('p', 'playerTutorialFocus', tutorial);
     const shift = node('div', 'playerShift', root);
     shift.id = 'playerShift';
 
@@ -151,6 +158,8 @@
     const speech = node('p', 'playerSpeech', interaction);
     const cue = node('p', 'playerCue', interaction);
     const leadHint = node('p', 'playerLeadHint', interaction);
+    const tutorialStage = node('p', 'playerTutorialStage', interaction);
+    tutorialStage.hidden = true;
     const choices = node('div', 'playerChoices', interaction);
     choices.setAttribute('role', 'group');
     choices.setAttribute('aria-label', 'Scegli come proseguire');
@@ -180,6 +189,8 @@
     node('summary', '', choiceHelp, 'Aiuto e dettagli');
     const helpCue = node('p', 'playerHelpCue', choiceHelp);
     const helpLead = node('p', 'playerHelpLead', choiceHelp);
+    const tutorialExplanation = node('p', 'playerTutorialExplanation', choiceHelp);
+    tutorialExplanation.hidden = true;
     const explanations = node('ol', 'playerChoiceExplanations', choiceHelp);
     const explanationRows = Array.from({ length: 3 }, () => {
       const item = node('li', '', explanations);
@@ -261,7 +272,8 @@
       return { row, title, time, outcome };
     });
 
-    refs = { root, commands, name, role, status, shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
+    refs = { root, commands, name, role, status, tutorial, tutorialTitle, tutorialFocus, tutorialStage, tutorialExplanation,
+      shift, learning, career, careerRoles, careerLabel, careerValue, careerBar,
       careerFill, careerHint, promote, promotion, currentTitle, description, state, started, progress,
       stages, interaction, interactionPhase, timer, speaker, speech, cue, leadHint, choiceRows, choiceFootnote, feedback,
       choiceHelp, helpCue, helpLead, explanationRows, visitDetails, visitIdentity, visitStatus, visitShift,
@@ -304,6 +316,18 @@
 
     setText(r.name, view.name || 'Tu');
     setText(r.role, view.role || 'Specialist');
+    const conversation = view.interaction;
+    const tutorialCandidate = conversation && conversation.tutorial || view.tutorial;
+    const tutorialDay = Number(tutorialCandidate && tutorialCandidate.day);
+    const tutorial = tutorialCandidate && tutorialDay >= 1 && tutorialDay <= 3
+      && /^(specialist|s)$/i.test(view.role || 'Specialist') ? tutorialCandidate : null;
+    r.tutorial.hidden = !tutorial;
+    r.root.classList.toggle('inTutorial', Boolean(tutorial));
+    if (tutorial) {
+      setText(r.tutorialTitle, 'Affiancamento · Giorno ' + tutorialDay + ' di 3');
+      setText(r.tutorialFocus, tutorial.focus || tutorial.title || tutorial.leadMessage);
+      r.tutorialFocus.hidden = !r.tutorialFocus.textContent;
+    }
     r.root.setAttribute('aria-label', 'Il tuo turno da ' + (view.role || 'Specialist'));
     setText(r.status, view.status || (view.isOver ? 'Turno concluso' : 'Pronto sul floor'));
     r.root.classList.toggle('needsBreak', Boolean(view.needsBreak));
@@ -373,7 +397,6 @@
       element.hidden = !element.textContent;
     });
     r.progress.hidden = !active;
-    const conversation = view.interaction;
     const currentPhase = active ? phaseIndex(conversation && conversation.phase || view.phase || active.stateLabel) : -1;
     r.stages.forEach((stage, i) => {
       stage.hidden = false;
@@ -389,6 +412,8 @@
       return value === undefined || value === null ? '' : String(value);
     };
     r.interaction.hidden = !conversation;
+    r.tutorialStage.hidden = !tutorial || !conversation || Boolean(conversation.complete);
+    r.tutorialExplanation.hidden = !tutorial || !conversation;
     r.visitHint.hidden = Boolean(conversation || view.lastInteraction);
     if (conversation) {
       const phase = phaseIndex(conversation.phase);
@@ -406,6 +431,13 @@
       r.leadHint.hidden = !r.leadHint.textContent;
       setText(r.helpLead, r.leadHint.textContent);
       r.helpLead.hidden = !r.helpLead.textContent;
+      if (tutorial) {
+        const compactHint = hint && hint.length <= 38 ? hint : TUTORIAL_STAGE_HINTS[phase] || tutorial.focus;
+        setText(r.tutorialStage, compactHint ? 'Lead: ' + compactHint : 'Il Lead ti affianca nella scelta.');
+        setText(r.tutorialExplanation, tutorial.leadMessage);
+        r.tutorialExplanation.hidden = !r.tutorialExplanation.textContent
+          || normalizedLine(r.tutorialExplanation.textContent) === normalizedLine(hint);
+      }
       const seconds = Number(conversation.secondsLeft);
       const hasTimer = conversation.secondsLeft !== null && conversation.secondsLeft !== undefined && Number.isFinite(seconds);
       r.timer.hidden = Boolean(conversation.complete);

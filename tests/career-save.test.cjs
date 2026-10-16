@@ -105,10 +105,10 @@ test('closing saves the completed day and actual personal profile for the next s
   Object.assign(first.mode().player().stats, learned);
   finish(first);
   assert.equal(first.game().over, true);
-  assert.deepEqual(load(first), snapshot({phase: 'completed'}));
+  assert.deepEqual(load(first), snapshot({phase: 'completed', tutorialShifts: 3}));
 
   const second = makeEnvironment({storage});
-  assert.deepEqual(load(second), snapshot({phase: 'completed'}));
+  assert.deepEqual(load(second), snapshot({phase: 'completed', tutorialShifts: 3}));
   resume(second);
   assert.equal(second.game().day, 15);
   const rested = profile(second);
@@ -169,13 +169,13 @@ test('an interrupted shift reloads the start snapshot without keeping uncomplete
   changeLiveProfile(first);
   assert.deepEqual(profile(first), {comp: learned.comp + 7 * (1 - 0.0075 * learned.stress),
     mot: 71, stress: 32, tier: 'S'});
-  assert.deepEqual(load(first), value, 'Live profile changes do not overwrite the shift-start checkpoint');
+  assert.deepEqual(load(first), {...value, tutorialShifts: 3}, 'Live profile changes do not overwrite the shift-start checkpoint');
 
   const second = makeEnvironment({storage});
   resume(second);
   assert.equal(second.game().day, 16);
   assert.deepEqual(profile(second), learned);
-  assert.deepEqual(load(second), value);
+  assert.deepEqual(load(second), {...value, tutorialShifts: 3});
 });
 
 test('switching from career to observation and resuming restores the start profile before live gains', () => {
@@ -187,7 +187,7 @@ test('switching from career to observation and resuming restores the start profi
   changeLiveProfile(env);
   env.evaluate("window.__sim.selectMode('observation')");
   assert.equal(env.mode(), null);
-  assert.deepEqual(load(env), value);
+  assert.deepEqual(load(env), {...value, tutorialShifts: 3});
   resume(env);
   assert.equal(env.evaluate('window.__sim.mode'), 'career');
   assert.equal(env.game().day, 18);
@@ -222,7 +222,7 @@ test('the New Career confirmation preserves the active visit when cancelled and 
   assert.equal(env.mode().player(), player);
   assert.equal(player.customer, client);
   assert.equal(client.staff, player);
-  assert.deepEqual(load(env), value);
+  assert.deepEqual(load(env), {...value, tutorialShifts: 3});
 
   env.context.confirm = () => { confirmations++; return true; };
   env.get('careerWelcomeNext').click();
@@ -231,7 +231,7 @@ test('the New Career confirmation preserves the active visit when cancelled and 
   assert.deepEqual(profile(env), defaults);
   assert.equal(env.game().customers.length, 0);
   assert.equal(env.mode().player().customer, null);
-  assert.deepEqual(load(env), snapshot({day: 7, profile: defaults}));
+  assert.deepEqual(load(env), snapshot({day: 7, profile: defaults, tutorialShifts: 0}));
 });
 
 test('explicitly starting a new career resets the saved day and player profile', () => {
@@ -240,7 +240,7 @@ test('explicitly starting a new career resets the saved day and player profile',
   env.evaluate("window.__sim.selectMode('career')");
   assert.equal(env.game().day, 7);
   assert.deepEqual(profile(env), defaults);
-  assert.deepEqual(load(env), snapshot({day: 7, profile: defaults}));
+  assert.deepEqual(load(env), snapshot({day: 7, profile: defaults, tutorialShifts: 0}));
   assert.equal(storage.get(MODE_KEY), 'career');
 });
 
